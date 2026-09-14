@@ -1,0 +1,90 @@
+:root {
+  --bg: #1b1d22; --panel: #262a31; --line: #3a3f48; --text: #e8e6e1; --muted: #9aa0a8;
+  --accent: #f0b429; --good: #4caf7a; --bad: #e05d5d;
+  --silver: #c9ccd1; --gold: #f2c744; --sapphire: #6cc6f0; --emerald: #7ccf5a; --ruby: #e0474c;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, sans-serif; }
+main { max-width: 1200px; margin: 0 auto; padding-block: 8px 40px; padding-inline: 12px; }
+h1 { font-size: 28px; margin: 12px 0; color: var(--accent); }
+h2 { font-size: 16px; margin: 16px 0 6px; color: var(--accent); }
+h3 { font-size: 14px; margin: 12px 0 6px; }
+.muted { color: var(--muted); }
+button {
+  background: var(--accent); color: #1b1d22; border: 0; border-radius: 6px; padding: 8px 10px;
+  font: inherit; font-weight: 600; cursor: pointer; min-height: 36px;
+}
+button.secondary { background: var(--line); color: var(--text); }
+button.primary { background: var(--good); color: #0e1a13; }
+button.small { padding: 3px 8px; min-height: 26px; font-size: 12px; }
+button:disabled { opacity: .4; cursor: default; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input { font: inherit; min-width: 0; max-width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+label { display: block; margin-top: 8px; }
+
+.lobby { max-width: 420px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
+.lobby .box { background: var(--panel); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.lobby .row { display: flex; gap: 8px; }
+.lobby .row input { flex: 1; text-transform: uppercase; letter-spacing: .2em; }
+.bigcode { font-size: 48px; letter-spacing: .25em; font-weight: 800; color: var(--accent); }
+.status { color: var(--muted); font-size: 12px; }
+
+.top { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.turn { background: var(--panel); padding: 8px 10px; border-radius: 6px; margin: 8px 0; }
+.turn.mine { outline: 2px solid var(--good); }
+.alert { background: #4a2a2a; border-left: 4px solid var(--bad); padding: 8px 10px; border-radius: 4px; margin: 6px 0; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 900px) { .layout { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); } }
+
+.mine { display: flex; flex-direction: column; gap: 3px; }
+.floor { display: flex; gap: 8px; background: var(--panel); border-radius: 6px; padding: 6px 8px; align-items: flex-start; }
+.floor.here { outline: 1px solid var(--accent); }
+.floor-name { width: 64px; flex-shrink: 0; font-weight: 700; }
+.floor-body { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-width: 0; }
+.dash, .tag, .card { overflow-wrap: anywhere; }
+.tag { background: var(--line); border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+.tag.barrier { background: #5a3b1f; }
+.tag.floorcard { background: #3d2f55; }
+.tag.good, tr.good td { color: var(--good); }
+.mech { border-radius: 10px; padding: 1px 8px; font-size: 12px; font-weight: 700; color: #111; }
+.mech-0 { background: #ef6f8a; } .mech-1 { background: #6fd3b8; } .mech-2 { background: #6f9cef; } .mech-3 { background: #f2d06b; }
+
+.gem { display: inline-block; min-width: 22px; text-align: center; border-radius: 4px; padding: 0 3px; margin: 0 1px; font-size: 11px; font-weight: 800; color: #111; }
+.gem-silver { background: var(--silver); } .gem-gold { background: var(--gold); } .gem-sapphire { background: var(--sapphire); }
+.gem-emerald { background: var(--emerald); } .gem-ruby { background: var(--ruby); }
+
+.dash { background: var(--panel); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.stats { display: flex; flex-wrap: wrap; gap: 12px; font-size: 16px; font-variant-numeric: tabular-nums; }
+.market { display: flex; flex-wrap: wrap; gap: 8px; }
+.mk small { color: var(--muted); }
+.bar { position: relative; height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; }
+.bar > div:first-child { height: 100%; background: var(--accent); }
+.bar .ovf { position: absolute; right: 0; top: 0; height: 100%; background: var(--bad); }
+.tiles { display: flex; flex-wrap: wrap; gap: 4px; }
+.tile { background: var(--line); border-radius: 4px; padding: 2px 6px; font-size: 12px; }
+.tile.ex { opacity: .55; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; align-items: center; }
+.cards { display: flex; flex-wrap: wrap; gap: 6px; }
+.card { width: 170px; max-width: 100%; background: var(--panel); border-radius: 8px; padding: 6px 8px; border-top: 4px solid var(--line); display: flex; flex-direction: column; gap: 3px; }
+.card-start { border-top-color: #8d96a3; } .card-damage { border-top-color: var(--bad); }
+.card-drill { border-top-color: #e0703c; } .card-move { border-top-color: #4f9ce0; }
+.card-util { border-top-color: #e0c43c; } .card-adv { border-top-color: #8e6ce0; }
+.card-top { display: flex; justify-content: space-between; gap: 4px; }
+.card-line { font-size: 12px; }
+.card-text { font-size: 11px; color: var(--muted); }
+.card-btns { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; align-items: center; }
+.card-btns button { padding: 4px 6px; min-height: 30px; font-size: 12px; }
+.fuel { color: var(--good); } .cost { color: #f08a7a; }
+.pts.neg { color: var(--bad); font-weight: 700; }
+.price { font-weight: 700; color: var(--accent); }
+.keep { display: inline-flex; gap: 4px; align-items: center; margin: 0; }
+.shop h3 { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.log { background: var(--panel); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--muted); max-height: 240px; overflow-y: auto; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+td, th { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+td:first-child, th:first-child { text-align: left; }
+details { margin: 8px 0; }

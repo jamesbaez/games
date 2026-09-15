@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/engine.test.js"
+    "test": "node --test test/engine.test.js",
+    "fuzz": "node test/ui-fuzz.mjs"
   }
 }

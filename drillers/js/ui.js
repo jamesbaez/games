@@ -1,4 +1,4 @@
-import { setup, apply, cardDef, tileDef, floorCardDef, activeFloorCard, nextMineral, trackUsed, trackLimit, score, GameError } from './engine.js';
+import { setup, apply, cardDef, tileDef, floorCardDef, activeFloorCard, nextMineral, trackUsed, trackLimit, score, revealsInfo, GameError } from './engine.js';
 import * as D from './data.js';
 import { hostGame, joinGame, newCode } from './net.js';
 
@@ -9,8 +9,11 @@ const LS = {
   del(k) { try { localStorage.removeItem(k); } catch {} },
 };
 const SAVE_VERSION = 2; // bump when the state shape changes so old saves are ignored
+const RULEBOOK = 'https://filemanager.czechgames.com/storage/files/drillers/rules/Drillers_rulebook_EN_2026-05-21.pdf';
 
-// session: { mode: 'local'|'host'|'guest', seat, state, net, status, code }
+// session: { mode: 'local'|'host'|'guest', seat, state, net, status, code, undo, canUndo }
+// undo (local/host only): earlier states of the current turn, cleared when hidden info is revealed.
+// canUndo (guest only): whether the host has something to undo, sent with each state.
 let session = null;
 let message = '';
 let keep = new Set();
@@ -31,7 +34,7 @@ function renderLobby() {
   app.innerHTML = `
     <section class="lobby">
       <h1>Drillers</h1>
-      <p class="muted">Unofficial fan implementation for playing with a friend. Own the real game!</p>
+      <p class="muted">Unofficial fan implementation for playing with a friend. Own the real game! <a href="${RULEBOOK}" target="_blank" rel="noopener">Rulebook (PDF)</a></p>
       <label for="name">Your name</label>
       <input id="name" value="${esc(name)}" maxlength="16" placeholder="Driller">
       <div class="box">
@@ -61,7 +64,7 @@ function myName() {
 
 function startHost(code, saved) {
   const name = myName();
-  session = { mode: 'host', seat: 0, state: savedState(saved), code, status: 'Starting…' };
+  session = { mode: 'host', seat: 0, state: savedState(saved), code, status: 'Starting…', undo: [] };
   session.net = hostGame({
     code,
     onStatus: (st) => { session.status = st; render(); },
@@ -70,8 +73,11 @@ function startHost(code, saved) {
         session.state = setup({ names: [name, guestName], seed: Math.floor(Math.random() * 2 ** 31) });
         LS.set('drillers.host', { code, state: session.state });
       }
-      session.net.send({ t: 'state', state: session.state, seat: 1 });
+      session.net.send({ t: 'state', state: session.state, seat: 1, canUndo: session.undo.length > 0 });
       render();
+    },
+    onUndo: () => {
+      if (!undo(1)) session.net.send({ t: 'error', msg: 'Nothing to undo.' });
     },
     onAction: (action) => {
       try {
@@ -94,7 +100,7 @@ function startGuest(code) {
     code, name,
     onStatus: (st) => { session.status = st; render(); },
     onMessage: (msg) => {
-      if (msg.t === 'state') { session.state = msg.state; session.seat = msg.seat; message = ''; }
+      if (msg.t === 'state') { session.state = msg.state; session.seat = msg.seat; session.canUndo = !!msg.canUndo; message = ''; }
       if (msg.t === 'error') message = msg.msg;
       render();
     },
@@ -103,7 +109,7 @@ function startGuest(code) {
 }
 
 function startLocal(state) {
-  session = { mode: 'local', state, status: 'Pass & play' };
+  session = { mode: 'local', state, status: 'Pass & play', undo: [] };
   passCurtain = null;
   LS.set('drillers.local', state);
   render();
@@ -111,12 +117,25 @@ function startLocal(state) {
 
 // ---------- state changes ----------
 function commit(next) {
+  const prev = session.state;
+  session.undo = revealsInfo(prev, next) ? [] : [...session.undo, prev];
+  show(next);
+}
+
+// Step back one action if the seat is the current player and nothing was revealed since.
+function undo(seat) {
+  if (!session.undo.length || session.state.current !== seat) return false;
+  show(session.undo.pop());
+  return true;
+}
+
+function show(next) {
   const prevCurrent = session.state.current;
   session.state = next;
   message = '';
   if (session.mode === 'host') {
     LS.set('drillers.host', { code: session.code, state: next });
-    session.net.send({ t: 'state', state: next, seat: 1 });
+    session.net.send({ t: 'state', state: next, seat: 1, canUndo: session.undo.length > 0 });
   }
   if (session.mode === 'local') {
     LS.set('drillers.local', next);
@@ -167,12 +186,24 @@ function cardHtml(s, iid, buttons = '') {
   const choose = c.choose ? 'choose: ' + c.choose.map((o) => o.label).join(' / ') : '';
   const cost = c.perm ? 'permanent' : c.play === 'solid' ? 'burn a mineral' : `${c.play}⛽`;
   return `<div class="card card-${c.shop}">
-    <div class="card-top"><b>${esc(c.name)}</b>${c.pts ? `<span class="pts neg">${c.pts}</span>` : ''}</div>
+    <div class="card-top"><b>${esc(c.name)}</b><span>${c.pts ? `<span class="pts neg">${c.pts}</span>` : ''}${pic('cards/' + c.id)}</span></div>
     <div class="card-line">${c.perm ? '' : `<span class="fuel">burn +${c.fuel}⛽</span>`} <span class="cost">main ${cost}</span></div>
     ${main || choose ? `<div class="card-line">${[main, choose].filter(Boolean).join(' · ')}</div>` : ''}
     ${c.text ? `<div class="card-text">${esc(c.text)}</div>` : ''}
     ${buttons ? `<div class="card-btns">${buttons}</div>` : ''}
   </div>`;
+}
+
+// Small button that opens a component photo in the viewer.
+const pic = (path) => `<button class="pic" data-img="img/${path}.webp" aria-label="Show image">🖼</button>`;
+
+function showImage(src) {
+  const v = document.createElement('div');
+  v.className = 'viewer';
+  v.innerHTML = `<img src="${esc(src)}" alt=""><p>Tap to close</p>`;
+  v.querySelector('img').onerror = () => { v.querySelector('p').textContent = 'No image for this yet. Tap to close'; };
+  v.addEventListener('click', () => v.remove());
+  document.body.append(v);
 }
 
 function btn(label, action, opts = {}) {
@@ -198,12 +229,12 @@ function mineHtml(s, me) {
     }
     if (fl.corridors.length) {
       const top = D.CORRIDOR_TILES[fl.corridors[0]];
-      parts.push(`<span class="tag">corridors ×${fl.corridors.length}, ${def.corridorCost}⛏ → ${top.minerals.map(gem).join('')} ${top.pts}pt</span>`);
+      parts.push(`<span class="tag">corridors ×${fl.corridors.length}, ${def.corridorCost}⛏ → ${top.minerals.map(gem).join('')} ${top.pts}pt ${pic('tiles/k' + fl.corridors[0])}</span>`);
     }
-    if (fl.barrier) parts.push(`<span class="tag barrier">BARRIER ${def.barrier.drill}⛏ · ${def.barrier.pts}pt</span>`);
+    if (fl.barrier) parts.push(`<span class="tag barrier">BARRIER ${def.barrier.drill}⛏ · ${def.barrier.pts}pt ${pic('tiles/b' + f)}</span>`);
     if (fl.card) {
       const fc = floorCardDef(fl.card);
-      parts.push(fl.cardUp ? `<span class="tag floorcard">${esc(fc.name)}: ${esc(fc.text)}</span>` : '<span class="tag">floor card ?</span>');
+      parts.push(fl.cardUp ? `<span class="tag floorcard">${esc(fc.name)}: ${esc(fc.text)} ${pic('floors/' + fl.card)}</span>` : '<span class="tag">floor card ?</span>');
     }
     return `<div class="floor ${me && me.floor === f ? 'here' : ''}">
       <div class="floor-name">${floorLabel(f)}${def.penalty ? ` <span class="muted">−${def.penalty}</span>` : ''}</div>
@@ -230,7 +261,7 @@ function dashHtml(s, p, mine) {
     const exLabel = d.ex === 'battery' ? '🔋' : fxText(d.ex);
     const label = `${d.barrier ? 'Barrier' : 'Corridor'} F${d.floor} ${d.pts - (t.ex ? d.loss : 0)}pt · ${exLabel}${t.ex ? ' (used)' : ''}`;
     const canEx = mine && !t.ex && d.ex !== 'battery' && s.phase !== 'upkeep' && s.current === p.idx && !s.over;
-    return `<span class="tile ${t.ex ? 'ex' : ''}">${label}${canEx ? ' ' + btn(`exhaust −${d.loss}pt`, { type: 'exhaust', index: i }, { cls: 'small' }) : ''}</span>`;
+    return `<span class="tile ${t.ex ? 'ex' : ''}">${label} ${pic('tiles/' + t.id)}${canEx ? ' ' + btn(`exhaust −${d.loss}pt`, { type: 'exhaust', index: i }, { cls: 'small' }) : ''}</span>`;
   }).join('');
   return `<div class="dash">
     <div class="stats">
@@ -244,7 +275,7 @@ function dashHtml(s, p, mine) {
     </div>
     <div>Storage (${p.storage.length}/${p.storageMax}): ${p.storage.map(gem).join('') || '<span class="muted">empty</span>'}</div>
     <div class="market">${market}</div>
-    <div>Progress ${used}/${limit} <span class="muted">(overflow ${p.overflow.length}/${D.OVERFLOW_SLOTS})</span> ${miles}</div>
+    <div>Progress ${used}/${limit} <span class="muted">(overflow ${p.overflow.length}/${D.OVERFLOW_SLOTS})</span> ${miles} ${pic('milestones')}</div>
     <div class="bar"><div style="width:${Math.min(100, (used / D.TRACK_LENGTH) * 100)}%"></div><div class="ovf" style="width:${(Math.min(p.overflow.length, D.OVERFLOW_SLOTS) / D.TRACK_LENGTH) * 100}%"></div></div>
     ${p.tiles.length ? `<div class="tiles">${tiles}</div>` : ''}
     <div class="muted">Deck ${p.deck.length} · discard ${p.discard.length} · hand ${p.hand.length}${p.refreshTile ? ' · shop refresh available' : ''}${mine && nextFuel !== undefined ? ` · next fuel upgrade ${nextFuel}c` : ''}</div>
@@ -284,6 +315,8 @@ function endOpsBtns(s, p) {
 function actionsHtml(s, p) {
   const out = [];
   const fl = s.floors[p.floor];
+  const canUndo = session.mode === 'guest' ? session.canUndo : session.undo.length > 0;
+  out.push(`<button class="secondary" ${canUndo ? '' : 'disabled'} data-lobby="undo">↶ Undo</button>`);
   if (s.phase === 'ops') {
     const collectCost = p.turn.passives.includes('suction') ? 'free' : '1⛏';
     const canCollect = (p.drills >= 1 || collectCost === 'free') && p.storage.length < p.storageMax;
@@ -422,7 +455,7 @@ function renderGame() {
     <header class="top">
       <div><b>Drillers</b> ${session.code ? `<span class="muted">room ${esc(session.code)}</span>` : ''}</div>
       <div class="status">${esc(session.status || '')}</div>
-      <button class="small secondary" data-lobby="leave">Menu</button>
+      <div><a href="${RULEBOOK}" target="_blank" rel="noopener">Rules</a> <button class="small secondary" data-lobby="leave">Menu</button></div>
     </header>
     ${s.over ? `<section><h2>Game over — ${esc(s.players[s.winner].name)} wins!</h2>${scoresHtml(s)}</section>` : `
     <div class="turn ${myTurn ? 'mine' : ''}">Turn ${s.turnNo}: <b>${esc(cur.name)}</b> — ${phaseName}${myTurn ? ' (you)' : ''}</div>`}
@@ -430,13 +463,13 @@ function renderGame() {
     ${message ? `<div class="alert">${esc(message)}</div>` : ''}
     <div class="layout">
       <section class="col">
-        <h2>Mine</h2>
+        <h2>Mine ${pic('board')}</h2>
         ${mineHtml(s, me)}
         <h2>Log</h2>
         <div class="log">${s.log.slice(-12).reverse().map((l) => `<div>${esc(l)}</div>`).join('')}</div>
       </section>
       <section class="col">
-        <h2>${esc(me.name)} (you)</h2>
+        <h2>${esc(me.name)} (you) ${pic('dashboard')}</h2>
         ${dashHtml(s, me, true)}
         ${myTurn ? actionsHtml(s, me) : ''}
         <h3>Hand</h3>
@@ -462,9 +495,15 @@ function render() {
 app.addEventListener('click', (e) => {
   const actEl = e.target.closest('[data-act]');
   if (actEl && !actEl.disabled) { act(JSON.parse(actEl.dataset.act)); return; }
+  const imgEl = e.target.closest('[data-img]');
+  if (imgEl?.dataset.img) { showImage(imgEl.dataset.img); return; }
   const lob = e.target.closest('[data-lobby]');
-  if (!lob) return;
+  if (!lob || lob.disabled) return;
   const what = lob.dataset.lobby;
+  if (what === 'undo') {
+    if (session.mode === 'guest') session.net.undo();
+    else if (!undo(session.mode === 'local' ? session.state.current : session.seat)) { message = 'Nothing to undo.'; render(); }
+  }
   if (what === 'host') { LS.del('drillers.host'); startHost(newCode(), null); }
   if (what === 'resumeHost') { const h = LS.get('drillers.host'); startHost(h.code, h.state); }
   if (what === 'join' || what === 'resumeGuest') {

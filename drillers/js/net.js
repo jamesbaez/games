@@ -7,7 +7,7 @@ export function newCode() {
   return Array.from({ length: 5 }, () => letters[Math.floor(Math.random() * letters.length)]).join('');
 }
 
-export function hostGame({ code, onHello, onAction, onStatus }) {
+export function hostGame({ code, onHello, onAction, onUndo, onStatus }) {
   const peer = new Peer(PREFIX + code);
   let conn = null;
   peer.on('open', () => onStatus(`Waiting for your friend — share code ${code}`));
@@ -18,6 +18,7 @@ export function hostGame({ code, onHello, onAction, onStatus }) {
     c.on('data', (msg) => {
       if (msg?.t === 'hello') onHello(msg.name);
       else if (msg?.t === 'action') onAction(msg.action);
+      else if (msg?.t === 'undo') onUndo();
     });
     c.on('close', () => onStatus(`Friend disconnected — they can rejoin with code ${code}`));
   });
@@ -57,6 +58,7 @@ export function joinGame({ code, name, onMessage, onStatus }) {
   });
   return {
     send: (action) => { if (conn && conn.open) conn.send({ t: 'action', action }); else onStatus('Not connected yet.'); },
+    undo: () => { if (conn && conn.open) conn.send({ t: 'undo' }); else onStatus('Not connected yet.'); },
     destroy: () => { stopped = true; peer.destroy(); },
   };
 }

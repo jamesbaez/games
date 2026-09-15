@@ -355,6 +355,15 @@ export function score(s, p) {
   return { tiles, minerals, credits, milestones, refresh, depth, cards, total };
 }
 
+// True if going from prev to next exposed hidden information (cards drawn or reshuffled,
+// the next corridor tile, a floor card, shop cards) or passed the turn. Undo stops there.
+export function revealsInfo(prev, next) {
+  if (next.current !== prev.current || next.over || next.rng !== prev.rng || next.advExpanded !== prev.advExpanded) return true;
+  if (next.floors.some((f, i) => f.corridors.length !== prev.floors[i].corridors.length || f.cardUp !== prev.floors[i].cardUp)) return true;
+  if (next.players.some((p, i) => p.deck.length < prev.players[i].deck.length)) return true;
+  return D.SHOPS.some(({ id }) => next.shops[id].deck.length < prev.shops[id].deck.length);
+}
+
 // ---------- actions ----------
 export function apply(state, action) {
   const s = structuredClone(state);

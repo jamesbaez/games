@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { setup, apply, cardDef, trackUsed, GameError } from '../js/engine.js';
+import { setup, apply, cardDef, trackUsed, revealsInfo, GameError } from '../js/engine.js';
 import * as D from '../js/data.js';
 
 const newGame = (seed = 42) => setup({ names: ['Ann', 'Bob'], seed });
@@ -23,6 +23,28 @@ test('card data is complete', () => {
   assert.equal(D.CORRIDOR_TILES.length, 29);
   assert.equal(D.FLOOR_CARDS.filter((c) => c.deck === 'start').length, 3);
   assert.equal(D.FLOOR_CARDS.filter((c) => c.deck === 'deep').length, 9);
+});
+
+test('revealsInfo: plain moves are undoable, draws/excavation/turn end are not', () => {
+  const s = newGame();
+  const torso = s.players[0].hand[0];
+  const s1 = apply(s, { p: 0, type: 'playMain', iid: torso, option: 1 });
+  assert.equal(revealsInfo(s, s1), false);
+  const s2 = apply(s1, { p: 0, type: 'move', dir: 1 });
+  assert.equal(revealsInfo(s1, s2), false);
+
+  const dig = structuredClone(s);
+  Object.assign(dig.players[0], { floor: 2, drills: 5 });
+  assert.equal(revealsInfo(dig, apply(dig, { p: 0, type: 'excavate' })), true);
+
+  const drawer = structuredClone(s);
+  const dmg = giveCard(drawer, 'damage');
+  assert.equal(revealsInfo(drawer, apply(drawer, { p: 0, type: 'playMain', iid: dmg })), true);
+
+  const e1 = apply(s, { p: 0, type: 'endOps' });
+  assert.equal(revealsInfo(s, e1), false);
+  const e2 = apply(e1, { p: 0, type: 'endSurface' });
+  assert.equal(revealsInfo(e2, apply(e2, { p: 0, type: 'endTurn', keep: [] })), true);
 });
 
 test('setup deals hands with TORSO first and correct credits', () => {

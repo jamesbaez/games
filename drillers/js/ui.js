@@ -1,6 +1,6 @@
 import { setup, apply, cardDef, tileDef, floorCardDef, activeFloorCard, nextMineral, trackUsed, trackLimit, score, revealsInfo, GameError } from './engine.js';
 import * as D from './data.js';
-import { hostGame, joinGame, newCode } from './net.js';
+import { hostGame, joinGame, newCode, packSave, unpackSave } from './net.js';
 
 const app = document.getElementById('app');
 const LS = {
@@ -11,13 +11,14 @@ const LS = {
 const SAVE_VERSION = 2; // bump when the state shape changes so old saves are ignored
 const RULEBOOK = 'https://filemanager.czechgames.com/storage/files/drillers/rules/Drillers_rulebook_EN_2026-05-21.pdf';
 
-// session: { mode: 'local'|'host'|'guest', seat, state, net, status, code, undo, canUndo }
+// session: { mode: 'local'|'host'|'guest'|'moved', seat, state, net, status, code, undo, canUndo, url }
 // undo (local/host only): earlier states of the current turn, cleared when hidden info is revealed.
 // canUndo (guest only): whether the host has something to undo, sent with each state.
 let session = null;
 let message = '';
 let keep = new Set();
 let passCurtain = null; // local mode: index of player we're waiting to hand the phone to
+let pendingMove = null; // { mode, code, state } from a #move= link, waiting for confirmation
 
 const esc = (x) => String(x).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 const MIN_ABBR = { silver: 'Ag', gold: 'Au', sapphire: 'Sa', emerald: 'Em', ruby: 'Ru' };
@@ -57,7 +58,9 @@ function renderLobby() {
 }
 
 function myName() {
-  const n = (document.getElementById('name')?.value || '').trim() || 'Driller';
+  const input = document.getElementById('name');
+  if (!input) return LS.get('drillers.name') || 'Driller';
+  const n = input.value.trim() || 'Driller';
   LS.set('drillers.name', n);
   return n;
 }
@@ -113,6 +116,57 @@ function startLocal(state) {
   passCurtain = state.over ? null : state.current; // start behind the curtain so the first player isn't spoiled
   LS.set('drillers.local', state);
   render();
+}
+
+// ---------- move to another device ----------
+// Packs the game into a link. A host stops hosting here so the other device can take the room code.
+async function moveDevice() {
+  const { mode, code, state } = session;
+  let url;
+  try {
+    url = `${location.origin}${location.pathname}#move=${await packSave(mode === 'host' ? { mode, code, state } : { mode, state })}`;
+  } catch (e) {
+    console.error(e);
+    message = 'Could not make a link in this browser.';
+    render();
+    return;
+  }
+  if (session.net) session.net.destroy();
+  session = { mode: 'moved', from: mode, url };
+  message = '';
+  render();
+}
+
+function renderMoved() {
+  app.innerHTML = `<section class="lobby"><h1>Move this game</h1>
+    <p>Open this link on your other device.${session.from === 'host' ? ' Hosting has stopped on this phone; your friend reconnects automatically once the other device opens the link.' : ''}</p>
+    <input readonly value="${esc(session.url)}">
+    ${navigator.share ? '<button data-lobby="shareMove">Share link…</button>' : ''}
+    <button class="${navigator.share ? 'secondary' : ''}" data-lobby="copyMove">Copy link</button>
+    ${message ? `<p class="status">${esc(message)}</p>` : ''}
+    <button class="secondary" data-lobby="leave">Back to menu</button></section>`;
+}
+
+function renderPendingMove() {
+  const names = pendingMove.state.players.map((p) => esc(p.name)).join(' vs ');
+  const replaces = pendingMove.mode === 'host' ? 'the game you host on this device' : 'the pass &amp; play game saved on this device';
+  app.innerHTML = `<section class="lobby"><h1>Load moved game?</h1>
+    <p>${names}, turn ${pendingMove.state.turnNo}${pendingMove.mode === 'host' ? `, room ${esc(pendingMove.code)}` : ''}.</p>
+    <p class="muted">This replaces ${replaces}. Close the game on the old device first.</p>
+    <button class="primary" data-lobby="acceptMove">Load it here</button>
+    <button class="secondary" data-lobby="rejectMove">Cancel</button></section>`;
+}
+
+const moveHash = globalThis.location?.hash || '';
+if (moveHash.startsWith('#move=')) {
+  history.replaceState(null, '', location.pathname);
+  unpackSave(moveHash.slice(6))
+    .then((m) => {
+      if (savedState(m.state) && (m.mode === 'local' || m.mode === 'host')) pendingMove = m;
+      else alert('That link is from an older version of the game and cannot be loaded.');
+    })
+    .catch(() => alert('That move link is broken or incomplete.'))
+    .then(render);
 }
 
 // ---------- state changes ----------
@@ -455,7 +509,7 @@ function renderGame() {
     <header class="top">
       <div><b>Drillers</b> ${session.code ? `<span class="muted">room ${esc(session.code)}</span>` : ''}</div>
       <div class="status">${esc(session.status || '')}</div>
-      <div><a href="${RULEBOOK}" target="_blank" rel="noopener">Rules</a> <button class="small secondary" data-lobby="leave">Menu</button></div>
+      <div><a href="${RULEBOOK}" target="_blank" rel="noopener">Rules</a> ${session.mode !== 'guest' ? '<button class="small secondary" data-lobby="move">Move device</button>' : ''} <button class="small secondary" data-lobby="leave">Menu</button></div>
     </header>
     ${s.over ? `<section><h2>Game over — ${esc(s.players[s.winner].name)} wins!</h2>${scoresHtml(s)}</section>` : `
     <div class="turn ${myTurn ? 'mine' : ''}">Turn ${s.turnNo}: <b>${esc(cur.name)}</b> — ${phaseName}${myTurn ? ' (you)' : ''}</div>`}
@@ -487,7 +541,9 @@ function renderGame() {
 }
 
 function render() {
-  if (!session) renderLobby();
+  if (pendingMove) renderPendingMove();
+  else if (session?.mode === 'moved') renderMoved();
+  else if (!session) renderLobby();
   else renderGame();
 }
 
@@ -518,6 +574,19 @@ app.addEventListener('click', (e) => {
   }
   if (what === 'resumeLocal') startLocal(savedState(LS.get('drillers.local')));
   if (what === 'reveal') { passCurtain = null; render(); }
+  if (what === 'move') moveDevice();
+  if (what === 'shareMove') navigator.share({ title: 'Drillers game', url: session.url }).catch(() => {});
+  if (what === 'copyMove') {
+    navigator.clipboard.writeText(session.url)
+      .then(() => { message = 'Link copied.'; }, () => { message = 'Copy failed. Select the link above and copy it.'; })
+      .then(render);
+  }
+  if (what === 'acceptMove') {
+    const m = pendingMove;
+    pendingMove = null;
+    if (m.mode === 'host') startHost(m.code, m.state); else startLocal(m.state);
+  }
+  if (what === 'rejectMove') { pendingMove = null; render(); }
   if (what === 'leave') {
     if (session?.net) session.net.destroy();
     session = null;

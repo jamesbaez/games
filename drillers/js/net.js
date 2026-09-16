@@ -2,6 +2,20 @@
 // The host is authoritative: guests send actions, the host sends back full state.
 const PREFIX = 'drillers-v1-';
 
+// Saved game <-> URL-safe text (gzip + base64url), for "move to another device" links.
+export async function packSave(obj) {
+  const stream = new Blob([JSON.stringify(obj)]).stream().pipeThrough(new CompressionStream('gzip'));
+  const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+export async function unpackSave(text) {
+  const bin = atob(text.replace(/-/g, '+').replace(/_/g, '/'));
+  const stream = new Blob([Uint8Array.from(bin, (ch) => ch.charCodeAt(0))]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return JSON.parse(await new Response(stream).text());
+}
+
 export function newCode() {
   const letters = 'ABCDEFGHJKMNPQRSTUVWXYZ';
   return Array.from({ length: 5 }, () => letters[Math.floor(Math.random() * letters.length)]).join('');

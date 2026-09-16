@@ -71,6 +71,7 @@ Run both `npm test` and `npm run fuzz` after changing engine, data or UI code.
 - Buttons carry `data-act` JSON actions, handled by one delegated click listener. Lobby and navigation buttons use `data-lobby`.
 - Pass & play shows a "pass the phone" curtain between turns.
 - **Undo:** the host (or the pass & play phone) keeps a stack of earlier states in `session.undo`. Each committed action is pushed unless `revealsInfo(prev, next)` in the engine says it exposed hidden information or passed the turn, in which case the stack is cleared. The guest sends `{t:'undo'}`, and the host sends `canUndo` with each state. The stack lives only in memory.
+- **Move device:** the Menu bar's "Move device" button (host and pass & play only) packs `{mode, code?, state}` with `packSave` in `net.js` (gzip + base64url, about 2 KB) into a `#move=` link. A host stops hosting when it makes the link. Opening the link shows a confirmation, then resumes as pass & play or as the host of the same room code. A guest moves by just rejoining with the code.
 - **Component images:** `pic(path)` renders a 🖼 button with `data-img="img/<path>.webp"`, which opens a full-screen viewer attached to `document.body`, so re-renders don't close it. Crops live in `drillers/img/{cards,floors,tiles}/` plus `board`, `dashboard` and `milestones`, named by the ids in `data.js`.
 
 ## Conventions

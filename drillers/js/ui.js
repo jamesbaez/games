@@ -110,7 +110,7 @@ function startGuest(code) {
 
 function startLocal(state) {
   session = { mode: 'local', state, status: 'Pass & play', undo: [] };
-  passCurtain = null;
+  passCurtain = state.over ? null : state.current; // start behind the curtain so the first player isn't spoiled
   LS.set('drillers.local', state);
   render();
 }

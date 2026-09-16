@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { setup, apply, cardDef, trackUsed, revealsInfo, GameError } from '../js/engine.js';
 import * as D from '../js/data.js';
 
-const newGame = (seed = 42) => setup({ names: ['Ann', 'Bob'], seed });
+const newGame = (seed = 42) => setup({ names: ['Ann', 'Bob'], seed, first: 0 });
 const expectError = (fn) => assert.throws(fn, GameError);
 // Put a specific card into player 0's hand.
 function giveCard(s, defId) {
@@ -45,6 +45,17 @@ test('revealsInfo: plain moves are undoable, draws/excavation/turn end are not',
   assert.equal(revealsInfo(s, e1), false);
   const e2 = apply(e1, { p: 0, type: 'endSurface' });
   assert.equal(revealsInfo(e2, apply(e2, { p: 0, type: 'endTurn', keep: [] })), true);
+});
+
+test('first player is random and starting credits follow turn order', () => {
+  const firsts = new Set();
+  for (let seed = 1; seed <= 40; seed++) {
+    const s = setup({ names: ['Ann', 'Bob'], seed });
+    firsts.add(s.current);
+    assert.equal(s.players[s.current].credits, 3);
+    assert.equal(s.players[1 - s.current].credits, 4);
+  }
+  assert.deepEqual([...firsts].sort(), [0, 1]);
 });
 
 test('setup deals hands with TORSO first and correct credits', () => {

@@ -52,7 +52,7 @@ function mk(s, defId) {
 }
 
 // ---------- setup ----------
-export function setup({ names, seed = Date.now() }) {
+export function setup({ names, seed = Date.now(), first }) {
   const n = names.length;
   const s = {
     v: 2, rng: seed >>> 0, cards: {}, nextId: 1, log: [], current: 0, phase: 'ops',
@@ -87,13 +87,16 @@ export function setup({ names, seed = Date.now() }) {
       idx: i, name, floor: 0, deck: [torso, ...shuffle(s, rest)], hand: [], discard: [], play: [], perms: [],
       fuel: D.FUEL.start, fuelMax: D.FUEL.startMax, storageMax: D.STORAGE.start, storage: [],
       market: Object.fromEntries(D.MINERALS.map((m) => [m, 0])), overflow: [], tiles: [],
-      drones: [true, false, false], refreshTile: true, credits: D.STARTING_CREDITS[n][i],
+      drones: [true, false, false], refreshTile: true, credits: 0,
       moves: 0, drills: 0, turn: freshTurn(),
     };
     draw(s, p, D.HAND_SIZE);
     return p;
   });
-  log(s, `Game started. ${s.players[0].name} goes first.`);
+  // Random first player (drawn after all shuffles); starting credits follow turn order.
+  s.current = first ?? Math.floor(rand(s) * n);
+  s.players.forEach((p, i) => { p.credits = D.STARTING_CREDITS[n][(i - s.current + n) % n]; });
+  log(s, `Game started. ${s.players[s.current].name} goes first.`);
   return s;
 }
 

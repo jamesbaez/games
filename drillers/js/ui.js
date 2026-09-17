@@ -137,15 +137,23 @@ function startOnline(code, seat) {
     onRoom: (room) => { if (session === me) receive(me, room); },
     onStatus: (st) => { if (session === me) { me.status = st; render(); } },
   });
-  me.beat = setInterval(() => markSeenIfShown(me), 30000);
-  markSeenIfShown(me);
+  me.beat = setInterval(() => { if (present()) markSeen(code, seat, true); }, 30000);
+  markSeen(code, seat, present());
   render();
 }
 
-// While the game is on screen, other devices skip this seat's turn alerts.
-function markSeenIfShown(me) {
-  if (session === me && document.visibilityState === 'visible') markSeen(me.code, me.seat);
+// Turn alerts are skipped for a seat whose game is on screen and in focus on some device.
+// Locking the phone or switching apps, tabs or windows counts as away at once.
+const present = () => document.visibilityState === 'visible' && document.hasFocus();
+
+function presenceChanged() {
+  if (session?.mode !== 'online') return;
+  if (document.visibilityState === 'visible') session.net.resume();
+  markSeen(session.code, session.seat, present());
 }
+document.addEventListener('visibilitychange', presenceChanged);
+addEventListener('focus', presenceChanged);
+addEventListener('blur', presenceChanged);
 
 // A room from the database: take it if it's newer than what this device has.
 function receive(me, room) {
@@ -192,19 +200,16 @@ function alertOthers(me, prev, next) {
 }
 
 function leave() {
-  if (session?.net) { session.net.close(); clearInterval(session.beat); }
+  if (session?.net) {
+    session.net.close();
+    clearInterval(session.beat);
+    markSeen(session.code, session.seat, false);
+  }
   session = null;
   seatPick = null;
   message = '';
   render();
 }
-
-document.addEventListener('visibilitychange', () => {
-  if (session?.mode === 'online' && document.visibilityState === 'visible') {
-    session.net.resume();
-    markSeenIfShown(session);
-  }
-});
 
 // ---------- move to another device (pass & play) ----------
 async function moveDevice() {

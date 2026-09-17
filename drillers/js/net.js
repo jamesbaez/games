@@ -4,12 +4,12 @@
 //     device that missed a move can't overwrite it. state is the engine state as a JSON string,
 //     because the database would drop its empty arrays and nulls. It's missing until the second
 //     player joins; host is the creator's name.
-//   seen/<CODE>/<seat> = server time that seat last had the game on screen.
+//   seen/<CODE>/<seat> = server time that seat last had the game on screen and in focus; removed when it leaves.
 // Turn alerts go to ntfy.sh, one topic per room and seat.
 const DB_URL = 'https://drillers-6dbe9-default-rtdb.firebaseio.com'; // see README.md
 const DB = (new URLSearchParams(globalThis.location?.search).get('db') || DB_URL).replace(/\/+$/, ''); // ?db= for local testing
 export const onlineReady = !!DB;
-const SEEN_FRESH_MS = 90000;
+const SEEN_FRESH_MS = 45000; // a present device refreshes seen every 30 seconds
 
 const dbUrl = (path, query = '') => `${DB}/${path}.json${query}`;
 
@@ -34,8 +34,9 @@ export function newCode() {
 
 // A POST with a method override is a "simple" cross-origin request, so browsers skip the CORS preflight.
 // Resolves true once written, false if the database rules refused it; rejects when offline.
-async function put(path, value) {
-  const res = await fetch(dbUrl(path, '?x-http-method-override=PUT&print=silent'), { method: 'POST', body: JSON.stringify(value) });
+// keepalive lets a write finish while the page is being hidden.
+async function put(path, value, keepalive = false) {
+  const res = await fetch(dbUrl(path, '?x-http-method-override=PUT&print=silent'), { method: 'POST', body: JSON.stringify(value), keepalive });
   if (res.ok || res.status === 401) return res.ok;
   throw new Error(`database error ${res.status}`);
 }
@@ -87,8 +88,9 @@ export function watchRoom(code, { onRoom, onStatus }) {
   };
 }
 
-// Called every 30 seconds while a seat has the game on screen, so its turn alerts can be skipped.
-export const markSeen = (code, seat) => put(`seen/${code}/${seat}`, { '.sv': 'timestamp' }).catch(() => {});
+// here = true every 30 seconds while a seat has the game on screen and in focus, so its turn alerts
+// are skipped; here = false as soon as it doesn't.
+export const markSeen = (code, seat, here) => put(`seen/${code}/${seat}`, here ? { '.sv': 'timestamp' } : null, true).catch(() => {});
 
 export const alertTopic = (code, seat) => `drillers-${code.toLowerCase()}-p${seat + 1}`;
 

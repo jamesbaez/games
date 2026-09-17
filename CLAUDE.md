@@ -72,7 +72,7 @@ Run both `npm test` and `npm run fuzz` after changing engine, data or UI code.
 - There is no host: every device applies actions with the engine and writes the whole room. `firebase.rules.json` only accepts `seq + 1`, so a device that missed a move gets its write refused (401), drops its queued writes, and reloads. **When the rules change, the owner must paste them into the Firebase console.**
 - Writes are POSTs with `?x-http-method-override=PUT` so browsers skip the CORS preflight. Reads stream through `EventSource`, reopened on `visibilitychange`.
 - A seat isn't tied to a device: any device with the code can pick a player. The full state goes to every device (trusted friends); the UI shows only your own hand and top card.
-- **Turn alerts:** after a save that passes the turn, the device posts to the ntfy.sh topic `drillers-<code>-p<seat+1>`, unless `seen/<CODE>/<seat>` (written every 30 s while that seat's page is visible) is under 90 s old.
+- **Turn alerts:** after a save that passes the turn, the device posts to the ntfy.sh topic `drillers-<code>-p<seat+1>`, unless that seat is present: `seen/<CODE>/<seat>` is under 45 s old. A device writes it every 30 s while the page is visible and focused, and deletes it (a `keepalive` write) on `visibilitychange`, `blur` or leaving the game. With one seat open on two devices, hiding either one counts as away.
 - localStorage: `drillers.online` (`{code, seat}` of the last online game), `drillers.local` (pass & play), `drillers.name`.
 
 **UI (`js/ui.js`)**

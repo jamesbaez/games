@@ -3,8 +3,10 @@
 //   Ann creates the game, Bob joins it, and Ann's "laptop" joins as Ann too, so both of Ann's
 //   devices click during her turns and fight over saves. The fake database also fails some writes
 //   and drops live connections. Bob's page counts as hidden, so turn alerts go to him only.
+//   At the end every page is hidden, which must clear its presence.
 // Fails on runtime errors, alerts, too little progress, alerts sent to the wrong seat, devices
-// that disagree about the game once the clicking stops, or database rules that allow a stale save.
+// that disagree about the game once the clicking stops, presence left behind by hidden pages,
+// or database rules that allow a stale save.
 // Usage: node test/online-fuzz.mjs [seconds=8] [dbUrl]  (a dbUrl runs against a real database, without chaos)
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 
@@ -31,11 +33,21 @@ if (isMainThread) {
   if (fake) Object.assign(fake.chaos, { failWrite: 0.02, dropStream: 0.01 }); // once everyone has joined
   const workers = { ann, bob, laptop };
   const reports = Object.fromEntries(await Promise.all(Object.entries(workers).map(([k, w]) =>
-    new Promise((resolve, reject) => { w.on('message', (m) => m.report && resolve([k, m.report])); w.on('error', reject); }))));
+    new Promise((resolve, reject) => {
+      w.on('message', (m) => {
+        if (m.settling && fake) Object.assign(fake.chaos, { failWrite: 0, dropStream: 0 }); // let the final writes through
+        if (m.report) resolve([k, m.report]);
+      });
+      w.on('error', reject);
+    }))));
   for (const w of Object.values(workers)) await w.terminate();
   const room = await (await fetch(`${db}/rooms/${code}.json`)).json();
   const state = JSON.parse(room.state);
   const problems = [];
+  for (const seat of [0, 1]) {
+    const seen = await (await fetch(`${db}/seen/${code}/${seat}.json`)).json();
+    if (seen !== null) problems.push(`seat ${seat} still counts as on screen after every page was hidden (${seen})`);
+  }
   // The database rules must refuse a stale save and must not let anyone list the games.
   const stale = await fetch(`${db}/rooms/${code}.json?x-http-method-override=PUT&print=silent`, { method: 'POST', body: JSON.stringify({ seq: room.seq, host: room.host }) });
   if (stale.status !== 401) problems.push(`a stale save got status ${stale.status}, expected 401`);
@@ -82,7 +94,9 @@ globalThis.document = {
   getElementById: (id) => (id === 'app' ? app : fields[id] || null),
   addEventListener: (type, fn) => { if (type === 'visibilitychange') visibilityHandler = fn; },
   visibilityState: hidden ? 'hidden' : 'visible',
+  hasFocus: () => document.visibilityState === 'visible',
 };
+globalThis.addEventListener = () => {};
 const store = {};
 globalThis.localStorage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
 globalThis.location = { search: `?db=${encodeURIComponent(db)}`, hash: '', origin: 'http://test', pathname: '/drillers/' };
@@ -172,6 +186,7 @@ while (Date.now() < end && !html.includes('Game over')) {
 }
 
 // Let saves finish, reconnect any dropped stream as if the page were shown again, then compare views.
+parentPort.postMessage({ settling: true });
 await sleep(1000);
 document.visibilityState = 'visible';
 visibilityHandler?.();
@@ -180,4 +195,7 @@ const part = (re) => html.match(re)?.[0] || '';
 const view = html.includes('class="turn') || html.includes('Game over')
   ? [part(/<div class="turn[^>]*>.*?<\/div>/).replace(/class="turn[^"]*"/, 'class="turn"').replace(' (you)', ''), part(/<h2>Game over.*?<\/section>/s), part(/<div class="log">.*?<\/div><\/div>/s), part(/<summary>Current score estimate<\/summary>.*?<\/table>/s)].join('\n')
   : '';
+document.visibilityState = 'hidden';
+visibilityHandler?.();
+await sleep(500);
 parentPort.postMessage({ report: { clicks, reloads, errors, alerts, pings, view } });

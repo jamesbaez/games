@@ -107,7 +107,7 @@ const c = (id, name, shop, o) => ({ id, name, shop, cost: 0, bat: false, fuel: 0
 export const CARDS = [
   // Starting deck (one each per player, plus 1 DAMAGE)
   c('vintage_drill', 'Vintage Drill', 'start', { fuel: 3, play: 0, fx: { drills: 1, removeSelf: true }, text: 'Remove this card from the game.' }),
-  c('torso', 'Torso', 'start', { fuel: 2, play: 1, choose: [{ label: '1⛏', fx: { drills: 1 } }, { label: '1↕', fx: { moves: 1 } }] }),
+  c('torso', 'Torso', 'start', { fuel: 2, play: 1, choose: [{ label: '1⛏', fx: { drills: 1 } }, { label: '1↕️', fx: { moves: 1 } }] }),
   c('crutch', 'Crutch', 'start', { fuel: 2, play: 0, fx: { moves: 1 }, pts: -2 }),
   c('spider_leg', 'Spider Leg', 'start', { fuel: 2, play: 1, fx: { moves: 2 }, pts: -1 }),
   c('claw', 'Claw', 'start', { fuel: 2, play: 1, fx: { drills: 1 }, pts: -2 }),
@@ -140,7 +140,7 @@ export const CARDS = [
   c('panic_button', 'Panic Button', 'move', { cost: 0, fuel: 3, play: 0, fx: { moves: 4, damage: 1 } }),
   c('wheels_on_heels', 'Wheels on Heels', 'move', { cost: 5, fuel: 3, play: 1, fx: { moves: 2, draw: 1 } }),
   c('rocket_drone', 'Rocket Drone', 'move', { cost: 4, fuel: 3, play: 1, fx: { moves: 3, drone: 1 } }),
-  c('footless_treads', 'Footless Treads', 'move', { cost: 5, fuel: 3, play: 1, fx: { moves: 3 }, choose: [{ label: '+1↕', fx: { moves: 1 } }, { label: 'refresh drone', fx: { drone: 1 } }, { label: '+1⛽', fx: { fuel: 1 } }] }),
+  c('footless_treads', 'Footless Treads', 'move', { cost: 5, fuel: 3, play: 1, fx: { moves: 3 }, choose: [{ label: '+1↕️', fx: { moves: 1 } }, { label: 'refresh drone', fx: { drone: 1 } }, { label: '+1⛽', fx: { fuel: 1 } }] }),
   c('rocket_engine', 'Rocket Engine', 'move', { cost: 7, fuel: 4, play: 2, fx: { moves: 3, repair: 1 } }),
   c('adaptive_engine', 'Adaptive Engine', 'move', { cost: 2, fuel: 3, play: 0, fx: { moves: 2 }, ability: { limit: 'inf', cost: { fuel: 2 }, gain: { moves: 1 } }, text: 'Any number of times: pay 2 fuel to gain 1 move.' }),
 
@@ -160,7 +160,7 @@ export const CARDS = [
 
   // Old corp tech — advanced (needs a battery)
   c('ultrahot_furnace', 'Ultrahot Furnace', 'adv', { cost: 3, bat: true, fuel: 3, play: 'solid', fx: { fuel: 6, upFuel: 1 }, text: 'Upgrade your maximum fuel once for free.' }),
-  c('transformer_drill', 'Transformer Drill', 'adv', { cost: 2, bat: true, fuel: 4, play: 1, choose: [{ label: '2⛏', fx: { drills: 2 } }, { label: '1⛏ 2↕', fx: { drills: 1, moves: 2 } }, { label: '4↕', fx: { moves: 4 } }] }),
+  c('transformer_drill', 'Transformer Drill', 'adv', { cost: 2, bat: true, fuel: 4, play: 1, choose: [{ label: '2⛏', fx: { drills: 2 } }, { label: '1⛏ 2↕️', fx: { drills: 1, moves: 2 } }, { label: '4↕️', fx: { moves: 4 } }] }),
   c('reckless_descent', 'Reckless Descent', 'adv', { cost: 0, bat: true, fuel: 4, play: 0, fx: { moves: 4, damage: 1 } }),
   c('super_heavy_drill', 'Super Heavy Drill', 'adv', { cost: 17, bat: true, fuel: 5, play: 4, fx: { drills: 5 } }),
   c('mining_drone_pro', 'Mining Drone Pro', 'adv', { cost: 6, bat: true, fuel: 4, play: 3, fx: { drills: 3, drone: 1 } }),

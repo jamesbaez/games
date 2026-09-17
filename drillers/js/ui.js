@@ -221,7 +221,7 @@ function act(action) {
 // ---------- rendering helpers ----------
 function fxText(fx = {}) {
   const bits = [];
-  if (fx.moves) bits.push(`${fx.moves}↕`);
+  if (fx.moves) bits.push(`${fx.moves}↕️`);
   if (fx.drills) bits.push(`${fx.drills}⛏`);
   if (fx.fuel) bits.push(`+${fx.fuel}⛽`);
   if (fx.credits) bits.push(`+${fx.credits}c`);
@@ -320,7 +320,7 @@ function dashHtml(s, p, mine) {
   return `<div class="dash">
     <div class="stats">
       <span>⛽ <b>${p.fuel}</b>/${p.fuelMax}</span>
-      <span>↕ <b>${p.moves}</b></span>
+      <span>↕️ <b>${p.moves}</b></span>
       <span>⛏ <b>${p.drills}</b></span>
       <span>💰 <b>${p.credits}</b></span>
       <span>🤖 ${p.drones.map((d) => (d ? '●' : '○')).join('')}</span>
@@ -353,7 +353,7 @@ function endOpsBtns(s, p) {
       return B(label) + [...new Set(p.storage)].filter(nextMineral).map((m) => B(`${label} + upgrade ${gem(m)}`, { exchange: m })).join('');
     case 'nocave':
       return B(label) + [['sapphire', 1], ['emerald', 2], ['ruby', 3]].filter(([, n]) => p.moves >= n && roomy)
-        .map(([m, n]) => B(`${label} + ${n}↕ → ${gem(m)}`, { cave: m })).join('');
+        .map(([m, n]) => B(`${label} + ${n}↕️ → ${gem(m)}`, { cave: m })).join('');
     case 'chill':
       return B(`${label} (pay 1⛽)`, { chill: 'fuel' }, p.fuel < 1) + B(`${label} (take damage)`, { chill: 'damage' });
     case 'toys': {
@@ -388,12 +388,13 @@ function actionsHtml(s, p) {
     }
     const below = s.floors[p.floor + 1];
     if (below?.barrier) out.push(btn(`Drill barrier (${D.FLOORS[p.floor + 1].barrier.drill}⛏)`, { type: 'barrier' }, { disabled: p.drills < D.FLOORS[p.floor + 1].barrier.drill }));
-    out.push(btn('3⛽ → 1↕', { type: 'default', kind: 'move' }, { cls: 'secondary', disabled: p.fuel < 3 }));
+    out.push(btn('3⛽ → 1↕️', { type: 'default', kind: 'move' }, { cls: 'secondary', disabled: p.fuel < 3 }));
     out.push(btn('4⛽ → 1⛏', { type: 'default', kind: 'drill' }, { cls: 'secondary', disabled: p.fuel < 4 }));
     out.push(btn('Take damage → 3⛽', { type: 'default', kind: 'damage' }, { cls: 'secondary', disabled: p.turn.dmgFuel }));
     if (p.drones.includes(true)) for (const m of new Set(p.storage)) out.push(btn(`Drone: sell ${gem(m)}`, { type: 'droneSell', mineral: m }, { cls: 'secondary' }));
     out.push(endOpsBtns(s, p));
   } else if (s.phase === 'surface') {
+    out.push(`<span class="muted">Sell unwanted hand cards with their Discard +${D.DISCARD_CREDITS}c button, and buy from the Shops below.</span>`);
     out.push(btn(`Sell all storage (${p.storage.length})`, { type: 'sell' }, { disabled: !p.storage.length }));
     out.push(btn('Refuel', { type: 'refuel' }, { disabled: p.fuel >= p.fuelMax }));
     out.push(btn(`Upgrade storage (${D.STORAGE.upgradeCost}c)`, { type: 'upStorage' }, { disabled: p.storageMax >= D.STORAGE.max || p.credits < D.STORAGE.upgradeCost }));

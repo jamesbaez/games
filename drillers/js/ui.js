@@ -1,6 +1,6 @@
 import { setup, apply, cardDef, tileDef, floorCardDef, activeFloorCard, nextMineral, trackUsed, trackLimit, score, revealsInfo, GameError } from './engine.js';
 import * as D from './data.js';
-import { hostGame, joinGame, newCode, packSave, unpackSave } from './net.js';
+import { onlineReady, createRoom, getRoom, writeRoom, watchRoom, markSeen, notify, alertTopic, packSave, unpackSave } from './net.js';
 
 const app = document.getElementById('app');
 const LS = {
@@ -10,26 +10,33 @@ const LS = {
 };
 const SAVE_VERSION = 2; // bump when the state shape changes so old saves are ignored
 const RULEBOOK = 'https://filemanager.czechgames.com/storage/files/drillers/rules/Drillers_rulebook_EN_2026-05-21.pdf';
+const OFFLINE = 'Could not reach the game server. Check your connection and try again.';
+const RELOADING = 'Reloading the game, try again in a moment.';
 
-// session: { mode: 'local'|'host'|'guest'|'moved', seat, state, net, status, code, undo, canUndo, url }
-// undo (local/host only): earlier states of the current turn, cleared when hidden info is revealed.
-// canUndo (guest only): whether the host has something to undo, sent with each state.
+// session: { mode: 'local'|'online'|'moved', state, status, undo, url }
+// undo: earlier states of this device's current turn, cleared when hidden info is revealed.
+// Online sessions also have: code, seat, host, net, beat (presence timer),
+//   seq: the latest write this device knows of (-1 while loading or reloading),
+//   confirmed: the latest state known to be saved, saving: promise chain of writes, gen: bumped to drop queued writes.
 let session = null;
 let message = '';
 let keep = new Set();
 let passCurtain = null; // local mode: index of player we're waiting to hand the phone to
-let pendingMove = null; // { mode, code, state } from a #move= link, waiting for confirmation
+let pendingMove = null; // { mode: 'local', state } from a #move= link, waiting for confirmation
+let seatPick = null; // { code, room } while choosing how this device joins an online game
+let busy = false; // a lobby request is in flight; ignore repeat taps
 
 const esc = (x) => String(x).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 const MIN_ABBR = { silver: 'Ag', gold: 'Au', sapphire: 'Sa', emerald: 'Em', ruby: 'Ru' };
 const gem = (m) => `<span class="gem gem-${m}" title="${m}">${MIN_ABBR[m]}</span>`;
 const floorLabel = (f) => (f === 0 ? 'Surface' : f === 1 ? 'Entrance' : 'F' + f);
 const savedState = (st) => (st && st.v === SAVE_VERSION ? st : null);
+const gameLink = (hash) => `${location.origin}${location.pathname}#${hash}`;
+const reloading = () => session.mode === 'online' && session.seq < 0;
 
 // ---------- lobby ----------
 function renderLobby() {
-  const host = LS.get('drillers.host');
-  const guest = LS.get('drillers.guest');
+  const online = LS.get('drillers.online');
   const local = savedState(LS.get('drillers.local'));
   const name = LS.get('drillers.name') || '';
   app.innerHTML = `
@@ -39,14 +46,16 @@ function renderLobby() {
       <label for="name">Your name</label>
       <input id="name" value="${esc(name)}" maxlength="16" placeholder="Driller">
       <div class="box">
-        <h2>Play on two phones</h2>
-        <button data-lobby="host">Host a new game</button>
+        <h2>Play online</h2>
+        ${onlineReady ? `
+        <p class="muted">Every move is saved online: play live, or a move every few hours, on any phone or laptop.</p>
+        <button data-lobby="create">Create a new game</button>
         <div class="row">
-          <input id="code" maxlength="5" placeholder="CODE" autocapitalize="characters">
+          <input id="code" maxlength="8" placeholder="GAME CODE" autocapitalize="characters">
           <button data-lobby="join">Join</button>
         </div>
-        ${host ? `<button class="secondary" data-lobby="resumeHost">Resume hosting ${esc(host.code)}</button>` : ''}
-        ${guest ? `<button class="secondary" data-lobby="resumeGuest">Rejoin ${esc(guest.code)}</button>` : ''}
+        ${online ? `<button class="secondary" data-lobby="resumeOnline">Resume game ${esc(online.code)}</button>` : ''}`
+        : `<p class="muted">Online play isn't set up yet.</p>`}
       </div>
       <div class="box">
         <h2>Pass &amp; play on this phone</h2>
@@ -65,50 +74,10 @@ function myName() {
   return n;
 }
 
-function startHost(code, saved) {
-  const name = myName();
-  session = { mode: 'host', seat: 0, state: savedState(saved), code, status: 'Starting…', undo: [] };
-  session.net = hostGame({
-    code,
-    onStatus: (st) => { session.status = st; render(); },
-    onHello: (guestName) => {
-      if (!session.state) {
-        session.state = setup({ names: [name, guestName], seed: Math.floor(Math.random() * 2 ** 31) });
-        LS.set('drillers.host', { code, state: session.state });
-      }
-      session.net.send({ t: 'state', state: session.state, seat: 1, canUndo: session.undo.length > 0 });
-      render();
-    },
-    onUndo: () => {
-      if (!undo(1)) session.net.send({ t: 'error', msg: 'Nothing to undo.' });
-    },
-    onAction: (action) => {
-      try {
-        commit(apply(session.state, { ...action, p: 1 }));
-      } catch (e) {
-        session.net.send({ t: 'error', msg: e instanceof GameError ? e.message : 'Something went wrong.' });
-        if (!(e instanceof GameError)) console.error(e);
-      }
-    },
-  });
-  LS.set('drillers.host', { code, state: session.state });
-  render();
-}
-
-function startGuest(code) {
-  const name = myName();
-  session = { mode: 'guest', seat: 1, state: null, code, status: 'Connecting…' };
-  LS.set('drillers.guest', { code });
-  session.net = joinGame({
-    code, name,
-    onStatus: (st) => { session.status = st; render(); },
-    onMessage: (msg) => {
-      if (msg.t === 'state') { session.state = msg.state; session.seat = msg.seat; session.canUndo = !!msg.canUndo; message = ''; }
-      if (msg.t === 'error') message = msg.msg;
-      render();
-    },
-  });
-  render();
+async function lobbyTask(fn) {
+  if (busy) return;
+  busy = true;
+  try { await fn(); } finally { busy = false; }
 }
 
 function startLocal(state) {
@@ -118,56 +87,172 @@ function startLocal(state) {
   render();
 }
 
-// ---------- move to another device ----------
-// Packs the game into a link. A host stops hosting here so the other device can take the room code.
+// ---------- online ----------
+async function createOnline() {
+  let code;
+  try { code = await createRoom(myName()); } catch (e) { console.warn(e); alert(OFFLINE); return; }
+  startOnline(code, 0);
+}
+
+// Opens a game from its code or a #room= link: resumes this device's seat, or asks how to join.
+async function openOnline(code) {
+  const saved = LS.get('drillers.online');
+  if (saved?.code === code) { startOnline(code, saved.seat); return; }
+  let room;
+  try { room = await getRoom(code); } catch (e) { console.warn(e); alert(OFFLINE); return; }
+  if (!room) { alert(`No game found with code ${code}.`); return; }
+  if (room.state && !savedState(room.state)) { alert('That game was saved by an older version and cannot be loaded.'); return; }
+  seatPick = { code, room };
+  render();
+}
+
+function renderSeatPick() {
+  const { code, room } = seatPick;
+  app.innerHTML = room.state
+    ? `<section class="lobby"><h1>Game ${esc(code)}</h1><p>Which player are you on this device?</p>
+      ${room.state.players.map((p, i) => `<button data-lobby="seat" data-seat="${i}">${esc(p.name)}</button>`).join('')}
+      <button class="secondary" data-lobby="leave">Cancel</button></section>`
+    : `<section class="lobby"><h1>Join game ${esc(code)}</h1><p><b>${esc(room.host)}</b> is waiting for a second player.</p>
+      <label for="name">Your name</label>
+      <input id="name" value="${esc(LS.get('drillers.name') || '')}" maxlength="16" placeholder="Driller">
+      <button class="primary" data-lobby="joinSeat">Join the game</button>
+      <button class="secondary" data-lobby="leave">Cancel</button></section>`;
+}
+
+async function joinAsSecond() {
+  const { code, room } = seatPick;
+  const state = setup({ names: [room.host, myName()], seed: Math.floor(Math.random() * 2 ** 31) });
+  let ok;
+  try { ok = await writeRoom(code, { seq: room.seq + 1, host: room.host, state }); } catch (e) { console.warn(e); alert(OFFLINE); return; }
+  if (ok) startOnline(code, 1);
+  else await openOnline(code); // someone joined first: choose a player instead
+}
+
+function startOnline(code, seat) {
+  seatPick = null;
+  LS.set('drillers.online', { code, seat });
+  const me = { mode: 'online', code, seat, host: '', state: null, confirmed: null, seq: -1, undo: [], status: 'Connecting…', saving: Promise.resolve(), gen: 0 };
+  session = me;
+  me.net = watchRoom(code, {
+    onRoom: (room) => { if (session === me) receive(me, room); },
+    onStatus: (st) => { if (session === me) { me.status = st; render(); } },
+  });
+  me.beat = setInterval(() => markSeenIfShown(me), 30000);
+  markSeenIfShown(me);
+  render();
+}
+
+// While the game is on screen, other devices skip this seat's turn alerts.
+function markSeenIfShown(me) {
+  if (session === me && document.visibilityState === 'visible') markSeen(me.code, me.seat);
+}
+
+// A room from the database: take it if it's newer than what this device has.
+function receive(me, room) {
+  if (!room) { me.status = 'This game no longer exists.'; render(); return; }
+  if (room.state && !savedState(room.state)) { me.status = 'This game was saved by an older version and cannot continue.'; render(); return; }
+  if (room.seq <= me.seq) return; // our own save coming back, or older news
+  if (me.seq >= 0) message = ''; // keep the "did not save" message after a reload
+  if (me.state?.current !== room.state?.current) keep = new Set();
+  Object.assign(me, { seq: room.seq, host: room.host, state: room.state, confirmed: room.state, undo: [] });
+  render();
+}
+
+// Online moves show at once and save in order. If a save fails (offline, or another device saved first),
+// the saves queued behind it are dropped and the game reloads from the database.
+function save(me, prev, next) {
+  const room = { seq: ++me.seq, host: me.host, state: next };
+  const gen = me.gen;
+  me.saving = me.saving.then(async () => {
+    if (me.gen !== gen) return;
+    let ok = false;
+    try { ok = await writeRoom(me.code, room); } catch {}
+    if (ok) {
+      me.confirmed = next;
+      alertOthers(me, prev, next);
+      return;
+    }
+    me.gen++;
+    Object.assign(me, { seq: -1, state: me.confirmed, undo: [] });
+    if (session !== me) return;
+    message = 'Your last move did not save (offline, or the game changed on another device). Reloading the game…';
+    keep = new Set();
+    render();
+    me.net.resume();
+  });
+}
+
+function alertOthers(me, prev, next) {
+  const link = gameLink(`room=${me.code}`);
+  if (next.over && !prev.over) {
+    next.players.forEach((p, i) => { if (i !== me.seat) notify(me.code, i, `Game over: ${next.players[next.winner].name} wins.`, link); });
+  } else if (!next.over && next.current !== prev.current && next.current !== me.seat) {
+    notify(me.code, next.current, `Your turn against ${next.players[me.seat].name}.`, link);
+  }
+}
+
+function leave() {
+  if (session?.net) { session.net.close(); clearInterval(session.beat); }
+  session = null;
+  seatPick = null;
+  message = '';
+  render();
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (session?.mode === 'online' && document.visibilityState === 'visible') {
+    session.net.resume();
+    markSeenIfShown(session);
+  }
+});
+
+// ---------- move to another device (pass & play) ----------
 async function moveDevice() {
-  const { mode, code, state } = session;
   let url;
   try {
-    url = `${location.origin}${location.pathname}#move=${await packSave(mode === 'host' ? { mode, code, state } : { mode, state })}`;
+    url = gameLink(`move=${await packSave({ mode: 'local', state: session.state })}`);
   } catch (e) {
     console.error(e);
     message = 'Could not make a link in this browser.';
     render();
     return;
   }
-  if (session.net) session.net.destroy();
-  session = { mode: 'moved', from: mode, url };
+  session = { mode: 'moved', url };
   message = '';
   render();
 }
 
 function renderMoved() {
   app.innerHTML = `<section class="lobby"><h1>Move this game</h1>
-    <p>Open this link on your other device.${session.from === 'host' ? ' Hosting has stopped on this phone; your friend reconnects automatically once the other device opens the link.' : ''}</p>
+    <p>Open this link on your other device.</p>
     <input readonly value="${esc(session.url)}">
-    ${navigator.share ? '<button data-lobby="shareMove">Share link…</button>' : ''}
-    <button class="${navigator.share ? 'secondary' : ''}" data-lobby="copyMove">Copy link</button>
+    ${navigator.share ? `<button data-lobby="share" data-text="${esc(session.url)}">Share link…</button>` : ''}
+    <button class="${navigator.share ? 'secondary' : ''}" data-lobby="copy" data-text="${esc(session.url)}">Copy link</button>
     ${message ? `<p class="status">${esc(message)}</p>` : ''}
     <button class="secondary" data-lobby="leave">Back to menu</button></section>`;
 }
 
 function renderPendingMove() {
   const names = pendingMove.state.players.map((p) => esc(p.name)).join(' vs ');
-  const replaces = pendingMove.mode === 'host' ? 'the game you host on this device' : 'the pass &amp; play game saved on this device';
   app.innerHTML = `<section class="lobby"><h1>Load moved game?</h1>
-    <p>${names}, turn ${pendingMove.state.turnNo}${pendingMove.mode === 'host' ? `, room ${esc(pendingMove.code)}` : ''}.</p>
-    <p class="muted">This replaces ${replaces}. Close the game on the old device first.</p>
+    <p>${names}, turn ${pendingMove.state.turnNo}.</p>
+    <p class="muted">This replaces the pass &amp; play game saved on this device. Close the game on the old device first.</p>
     <button class="primary" data-lobby="acceptMove">Load it here</button>
     <button class="secondary" data-lobby="rejectMove">Cancel</button></section>`;
 }
 
-const moveHash = globalThis.location?.hash || '';
-if (moveHash.startsWith('#move=')) {
-  history.replaceState(null, '', location.pathname);
-  unpackSave(moveHash.slice(6))
+const startHash = globalThis.location?.hash || '';
+if (startHash.startsWith('#move=') || startHash.startsWith('#room=')) history.replaceState(null, '', location.pathname + location.search);
+if (startHash.startsWith('#move=')) {
+  unpackSave(startHash.slice(6))
     .then((m) => {
-      if (savedState(m.state) && (m.mode === 'local' || m.mode === 'host')) pendingMove = m;
+      if (savedState(m.state) && m.mode === 'local') pendingMove = m;
       else alert('That link is from an older version of the game and cannot be loaded.');
     })
     .catch(() => alert('That move link is broken or incomplete.'))
     .then(render);
 }
+if (startHash.startsWith('#room=') && onlineReady) lobbyTask(() => openOnline(startHash.slice(6).toUpperCase()));
 
 // ---------- state changes ----------
 function commit(next) {
@@ -176,41 +261,32 @@ function commit(next) {
   show(next);
 }
 
-// Step back one action if the seat is the current player and nothing was revealed since.
-function undo(seat) {
-  if (!session.undo.length || session.state.current !== seat) return false;
+// Step back one of this device's actions, if nothing was revealed since.
+function undo() {
+  if (!session.undo.length) return false;
   show(session.undo.pop());
   return true;
 }
 
 function show(next) {
-  const prevCurrent = session.state.current;
+  const prev = session.state;
   session.state = next;
   message = '';
-  if (session.mode === 'host') {
-    LS.set('drillers.host', { code: session.code, state: next });
-    session.net.send({ t: 'state', state: next, seat: 1, canUndo: session.undo.length > 0 });
-  }
+  if (session.mode === 'online') save(session, prev, next);
   if (session.mode === 'local') {
     LS.set('drillers.local', next);
-    if (next.current !== prevCurrent && !next.over) passCurtain = next.current;
+    if (next.current !== prev.current && !next.over) passCurtain = next.current;
   }
-  if (next.current !== prevCurrent) keep = new Set();
+  if (next.current !== prev.current) keep = new Set();
   render();
 }
 
 function act(action) {
   const s = session.state;
+  if (reloading()) { message = RELOADING; render(); return; }
   const seat = session.mode === 'local' ? s.current : session.seat;
-  const full = { ...action, p: seat };
-  if (session.mode === 'guest') {
-    // validate locally for instant feedback, then send to the host
-    try { apply(s, full); } catch (e) { message = e.message; render(); return; }
-    session.net.send(full);
-    return;
-  }
   try {
-    commit(apply(s, full));
+    commit(apply(s, { ...action, p: seat }));
   } catch (e) {
     message = e instanceof GameError ? e.message : 'Something went wrong.';
     if (!(e instanceof GameError)) console.error(e);
@@ -369,8 +445,7 @@ function endOpsBtns(s, p) {
 function actionsHtml(s, p) {
   const out = [];
   const fl = s.floors[p.floor];
-  const canUndo = session.mode === 'guest' ? session.canUndo : session.undo.length > 0;
-  out.push(`<button class="secondary" ${canUndo ? '' : 'disabled'} data-lobby="undo">↶ Undo</button>`);
+  out.push(`<button class="secondary" ${session.undo.length ? '' : 'disabled'} data-lobby="undo">↶ Undo</button>`);
   if (s.phase === 'ops') {
     const collectCost = p.turn.passives.includes('suction') ? 'free' : '1⛏';
     const canCollect = (p.drills >= 1 || collectCost === 'free') && p.storage.length < p.storageMax;
@@ -484,11 +559,25 @@ function scoresHtml(s) {
   return `<div class="table-wrap"><table><tr><th></th><th>Tiles</th><th>Minerals</th><th>Credits</th><th>Milestones</th><th>Refresh</th><th>Depth</th><th>Cards</th><th>Total</th></tr>${rows}</table></div>`;
 }
 
+function alertsHtml() {
+  const topic = alertTopic(session.code, session.seat);
+  return `<details class="alerts"><summary>🔔 Turn alerts</summary>
+    <p>To get a notification when it's your turn, even with this page closed, install the free <b>ntfy</b> app (iPhone or Android), tap + and subscribe to:</p>
+    <p><code>${esc(topic)}</code> <button class="small secondary" data-lobby="copy" data-text="${esc(topic)}">Copy</button></p>
+    <p class="muted">On a laptop, open <a href="https://ntfy.sh/${esc(topic)}" target="_blank" rel="noopener">ntfy.sh/${esc(topic)}</a> and allow notifications. No alert is sent while this game is on your screen.</p>
+  </details>`;
+}
+
 function renderGame() {
   const s = session.state;
   if (!s) {
+    const invite = gameLink(`room=${session.code}`);
     app.innerHTML = `<section class="lobby"><h1>Drillers</h1>
-      ${session.mode === 'host' ? `<p>Room code</p><div class="bigcode">${esc(session.code)}</div><p>Your friend opens this page and enters the code.</p>` : ''}
+      <p>Game code</p><div class="bigcode">${esc(session.code)}</div>
+      <p>Your friend opens this page, taps Join and enters the code, or opens your invite link.</p>
+      ${navigator.share ? `<button data-lobby="share" data-text="${esc(invite)}">Share invite link…</button>` : ''}
+      <button class="secondary" data-lobby="copy" data-text="${esc(invite)}">Copy invite link</button>
+      ${message ? `<p class="status">${esc(message)}</p>` : ''}
       <p class="status">${esc(session.status)}</p>
       <button class="secondary" data-lobby="leave">Back</button></section>`;
     return;
@@ -508,10 +597,11 @@ function renderGame() {
 
   app.innerHTML = `
     <header class="top">
-      <div><b>Drillers</b> ${session.code ? `<span class="muted">room ${esc(session.code)}</span>` : ''}</div>
+      <div><b>Drillers</b> ${session.code ? `<span class="muted">game ${esc(session.code)}</span>` : ''}</div>
       <div class="status">${esc(session.status || '')}</div>
-      <div><a href="${RULEBOOK}" target="_blank" rel="noopener">Rules</a> ${session.mode !== 'guest' ? '<button class="small secondary" data-lobby="move">Move device</button>' : ''} <button class="small secondary" data-lobby="leave">Menu</button></div>
+      <div><a href="${RULEBOOK}" target="_blank" rel="noopener">Rules</a> ${session.mode === 'local' ? '<button class="small secondary" data-lobby="move">Move device</button>' : ''} <button class="small secondary" data-lobby="leave">Menu</button></div>
     </header>
+    ${session.mode === 'online' ? alertsHtml() : ''}
     ${s.over ? `<section><h2>Game over — ${esc(s.players[s.winner].name)} wins!</h2>${scoresHtml(s)}</section>` : `
     <div class="turn ${myTurn ? 'mine' : ''}">Turn ${s.turnNo}: <b>${esc(cur.name)}</b> — ${phaseName}${myTurn ? ' (you)' : ''}</div>`}
     ${s.endBy !== null && !s.over ? '<div class="alert">The mine is collapsing — final turns!</div>' : ''}
@@ -543,6 +633,7 @@ function renderGame() {
 
 function render() {
   if (pendingMove) renderPendingMove();
+  else if (seatPick) renderSeatPick();
   else if (session?.mode === 'moved') renderMoved();
   else if (!session) renderLobby();
   else renderGame();
@@ -557,17 +648,16 @@ app.addEventListener('click', (e) => {
   const lob = e.target.closest('[data-lobby]');
   if (!lob || lob.disabled) return;
   const what = lob.dataset.lobby;
-  if (what === 'undo') {
-    if (session.mode === 'guest') session.net.undo();
-    else if (!undo(session.mode === 'local' ? session.state.current : session.seat)) { message = 'Nothing to undo.'; render(); }
+  if (what === 'undo' && (reloading() || !undo())) { message = reloading() ? RELOADING : 'Nothing to undo.'; render(); }
+  if (what === 'create') lobbyTask(createOnline);
+  if (what === 'join' || what === 'resumeOnline') {
+    const code = what === 'join' ? document.getElementById('code').value.trim().toUpperCase() : LS.get('drillers.online').code;
+    if (!/^[A-Z]{8}$/.test(code)) { alert('Enter the 8-letter game code.'); return; }
+    myName();
+    lobbyTask(() => openOnline(code));
   }
-  if (what === 'host') { LS.del('drillers.host'); startHost(newCode(), null); }
-  if (what === 'resumeHost') { const h = LS.get('drillers.host'); startHost(h.code, h.state); }
-  if (what === 'join' || what === 'resumeGuest') {
-    const code = what === 'join' ? document.getElementById('code').value.trim().toUpperCase() : LS.get('drillers.guest').code;
-    if (code.length !== 5) { message = 'Enter the 5-letter room code.'; alert(message); return; }
-    startGuest(code);
-  }
+  if (what === 'seat') startOnline(seatPick.code, Number(lob.dataset.seat));
+  if (what === 'joinSeat') lobbyTask(joinAsSecond);
   if (what === 'local') {
     const a = myName();
     const b = (document.getElementById('p2').value || '').trim() || 'Player 2';
@@ -576,24 +666,19 @@ app.addEventListener('click', (e) => {
   if (what === 'resumeLocal') startLocal(savedState(LS.get('drillers.local')));
   if (what === 'reveal') { passCurtain = null; render(); }
   if (what === 'move') moveDevice();
-  if (what === 'shareMove') navigator.share({ title: 'Drillers game', url: session.url }).catch(() => {});
-  if (what === 'copyMove') {
-    navigator.clipboard.writeText(session.url)
-      .then(() => { message = 'Link copied.'; }, () => { message = 'Copy failed. Select the link above and copy it.'; })
+  if (what === 'share') navigator.share({ title: 'Drillers', url: lob.dataset.text }).catch(() => {});
+  if (what === 'copy') {
+    navigator.clipboard.writeText(lob.dataset.text)
+      .then(() => { message = 'Copied.'; }, () => { message = 'Copy failed. Select the text and copy it by hand.'; })
       .then(render);
   }
   if (what === 'acceptMove') {
     const m = pendingMove;
     pendingMove = null;
-    if (m.mode === 'host') startHost(m.code, m.state); else startLocal(m.state);
+    startLocal(m.state);
   }
   if (what === 'rejectMove') { pendingMove = null; render(); }
-  if (what === 'leave') {
-    if (session?.net) session.net.destroy();
-    session = null;
-    message = '';
-    render();
-  }
+  if (what === 'leave') leave();
 });
 app.addEventListener('change', (e) => {
   const k = e.target.dataset?.keep;

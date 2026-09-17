@@ -11,7 +11,7 @@ A personal repo of browser versions of board games, so the owner and a friend ca
 
 | Game | Folder | Status |
 |---|---|---|
-| Drillers (Czech Games Edition, 2026) | `drillers/` | Playable. Unofficial fan implementation. Online 2-player via room code, plus pass & play. The engine supports 1–4 players; there is no solo bot. |
+| Drillers (Czech Games Edition, 2026) | `drillers/` | Playable. Unofficial fan implementation. Online 2-player via game code (live or slow, moves saved in Firebase), plus pass & play. The engine supports 1–4 players; there is no solo bot. |
 
 "It doesn't have to be pretty." The UI is deliberately utilitarian and phone-first.
 
@@ -21,14 +21,16 @@ A personal repo of browser versions of board games, so the owner and a friend ca
 index.html              list of games (link each new game here)
 README.md
 drillers/
-  index.html            loads PeerJS (pinned, cdnjs) + js/ui.js
+  index.html            loads js/ui.js
+  firebase.rules.json   Realtime Database rules (paste into the Firebase console when they change)
   css/style.css
   js/data.js            ALL game content: cards, tiles, floor cards, board numbers
   js/engine.js          pure rules engine (no DOM)
-  js/net.js             PeerJS peer-to-peer transport
+  js/net.js             online games: Firebase REST API, ntfy turn alerts, move-link packing
   js/ui.js              rendering + input
   test/engine.test.js   node:test unit tests + full-game bot simulation
   test/ui-fuzz.mjs      random-click smoke test of the real UI (no browser needed)
+  test/online-fuzz.mjs  three UI copies play one online game through test/fake-firebase.mjs
   RULES.md              rules summary + every interpretation the engine makes
   ref/                  GITIGNORED local reference material (see below)
 ```
@@ -38,12 +40,17 @@ drillers/
 ```bash
 cd drillers
 npm test                 # engine unit tests + bot games (Node 18+, no deps to install)
-npm run fuzz             # clicks random buttons in ui.js through 4 local games (abandons any past 2500 turns)
-                         # args: node test/ui-fuzz.mjs <games> <seed> <maxTurns>; the same seed replays the same run
-                         # fails on runtime errors, a screen with no enabled buttons, or no game reaching game over
+npm run fuzz             # ui-fuzz, then online-fuzz
+                         # ui-fuzz: clicks random buttons in ui.js through 4 local games (abandons any past 2500 turns)
+                         #   args: node test/ui-fuzz.mjs <games> <seed> <maxTurns>; the same seed replays the same run
+                         #   fails on runtime errors, a screen with no enabled buttons, or no game reaching game over
+                         # online-fuzz: 3 devices (2 of them the same player) click for 8 s against a fake database
+                         #   that fails writes and drops connections; fails if devices end up disagreeing
+                         #   args: node test/online-fuzz.mjs <seconds> <dbUrl>; a real dbUrl also checks its rules
 
 # run locally (from the repo root)
 python3 -m http.server 8000   # then open http://localhost:8000/drillers/
+                              # add ?db=<database url> to point online play at another database
 ```
 
 Run both `npm test` and `npm run fuzz` after changing engine, data or UI code.
@@ -59,24 +66,27 @@ Run both `npm test` and `npm run fuzz` after changing engine, data or UI code.
 - Floor cards are hard-coded by id in `floorEffect` (reveal/corridor/collect) and `endOpsFloor` (end of Operations, with choices passed in `action.opt`).
 - The state carries a version, `state.v` (currently 2). **When the state shape changes, bump it and `SAVE_VERSION` in `ui.js` together** so stale saved games are ignored rather than crashing.
 
-**Networking (`js/net.js`)**
-- The host is authoritative. The host registers the peer id `drillers-v1-<CODE>` (5 letters) on the free PeerJS cloud broker.
-- The guest sends `{t:'action', action}`. The host applies it with `p` forced to seat 1 and broadcasts `{t:'state', state, seat:1}`, or `{t:'error', msg}`.
-- The guest validates each action locally first, for instant feedback.
-- The full state goes to both phones (trusted friends). The UI shows only your own hand and top card.
-- Saved state lives in localStorage: `drillers.host` (code + state, so hosting can resume), `drillers.guest` (code), `drillers.local` (pass & play).
+**Online play (`js/net.js`)**
+- Games live in a Firebase Realtime Database (free Spark plan, owner's Google account), set by `DB_URL` in `net.js`. It's used through the REST API only: no SDK, no auth.
+- `rooms/<CODE>` (8 letters) = `{ seq, host, state }`. `state` is the engine state as a JSON string (the database drops empty arrays and nulls), missing until the second player joins.
+- There is no host: every device applies actions with the engine and writes the whole room. `firebase.rules.json` only accepts `seq + 1`, so a device that missed a move gets its write refused (401), drops its queued writes, and reloads. **When the rules change, the owner must paste them into the Firebase console.**
+- Writes are POSTs with `?x-http-method-override=PUT` so browsers skip the CORS preflight. Reads stream through `EventSource`, reopened on `visibilitychange`.
+- A seat isn't tied to a device: any device with the code can pick a player. The full state goes to every device (trusted friends); the UI shows only your own hand and top card.
+- **Turn alerts:** after a save that passes the turn, the device posts to the ntfy.sh topic `drillers-<code>-p<seat+1>`, unless `seen/<CODE>/<seat>` (written every 30 s while that seat's page is visible) is under 90 s old.
+- localStorage: `drillers.online` (`{code, seat}` of the last online game), `drillers.local` (pass & play), `drillers.name`.
 
 **UI (`js/ui.js`)**
 - Every change re-renders all of `#app` via `innerHTML`.
 - Buttons carry `data-act` JSON actions, handled by one delegated click listener. Lobby and navigation buttons use `data-lobby`.
 - Pass & play shows a "pass the phone" curtain between turns.
-- **Undo:** the host (or the pass & play phone) keeps a stack of earlier states in `session.undo`. Each committed action is pushed unless `revealsInfo(prev, next)` in the engine says it exposed hidden information or passed the turn, in which case the stack is cleared. The guest sends `{t:'undo'}`, and the host sends `canUndo` with each state. The stack lives only in memory.
-- **Move device:** the Menu bar's "Move device" button (host and pass & play only) packs `{mode, code?, state}` with `packSave` in `net.js` (gzip + base64url, about 2 KB) into a `#move=` link. A host stops hosting when it makes the link. Opening the link shows a confirmation, then resumes as pass & play or as the host of the same room code. A guest moves by just rejoining with the code.
+- **Undo:** each device keeps a stack of earlier states of its own turn in `session.undo`. Each committed action is pushed unless `revealsInfo(prev, next)` in the engine says it exposed hidden information or passed the turn, in which case the stack is cleared. Online, an undo is just another save, and a move arriving from another device clears the stack. The stack lives only in memory.
+- **Online saves** show immediately and queue in `session.saving`. `session.seq` is -1 while loading or reloading, and actions are refused until the room arrives.
+- **Links:** `#room=<CODE>` (invite links and ntfy alert clicks) opens that game. `#move=` (pass & play only, the Menu bar's "Move device") packs `{mode:'local', state}` with `packSave` (gzip + base64url, about 3 KB).
 - **Component images:** `pic(path)` renders a 🖼 button with `data-img="img/<path>.webp"`, which opens a full-screen viewer attached to `document.body`, so re-renders don't close it. Crops live in `drillers/img/{cards,floors,tiles}/` plus `board`, `dashboard` and `milestones`, named by the ids in `data.js`.
 
 ## Conventions
 
-- Vanilla ES modules only: no bundler, no npm dependencies. The single external script is PeerJS, pinned on cdnjs.
+- Vanilla ES modules only: no bundler, no npm dependencies, no external scripts. The only outside services are Firebase (online games) and ntfy.sh (turn alerts), both over plain `fetch`/`EventSource`.
 - Game content belongs in `data.js`, not in engine code. Keep the engine free of DOM access.
 - Before assuming a rule, check `drillers/RULES.md`, then the rulebook PDF in `drillers/ref/rulebook/`, then the component photos in `drillers/ref/photos-hires/`.
 - A new game gets its own top-level folder with its own `index.html`, linked from the root `index.html`. Don't build shared code until a second game actually needs it.
@@ -114,7 +124,7 @@ Never commit anything from `ref/`. The files are large and contain the publisher
 
 ## Status and known gaps (as of 2026-09-15)
 
-- Online two-phone play has **not yet been tested on real devices**. It only ran in code. If joining fails, start by looking at PeerJS broker or NAT issues (there is no TURN server).
+- Online play replaced the PeerJS version on 2026-09-17. The database is the owner's Firebase project `drillers-6dbe9`. It has been tested with `online-fuzz` against both the fake and the real database, and with two copies of the page in headless Chrome against the real one, but **not yet on real phones**, and ntfy alerts have not been received on a real device.
 - Solo mode (the bot boards on the back of the dashboards) is not implemented.
 - An advanced card's Buy button stays enabled without a battery tile; the engine rejects it with a message.
 - Some choices are made automatically: solid fuel burns the cheapest stored mineral, and Current-C Miner moves the cheapest market column.

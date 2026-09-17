@@ -26,7 +26,7 @@ label { display: block; margin-top: 8px; }
 .lobby .box { background: var(--panel); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .lobby .row { display: flex; gap: 8px; }
 .lobby .row input { flex: 1; text-transform: uppercase; letter-spacing: .2em; }
-.bigcode { font-size: 48px; letter-spacing: .25em; font-weight: 800; color: var(--accent); }
+.bigcode { font-size: 36px; letter-spacing: .15em; font-weight: 800; color: var(--accent); }
 .status { color: var(--muted); font-size: 12px; }
 
 .top { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
@@ -88,6 +88,9 @@ table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
 td, th { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; }
 td:first-child, th:first-child { text-align: left; }
 details { margin: 8px 0; }
+.alerts { background: var(--panel); border-radius: 6px; padding: 6px 10px; }
+.alerts p { margin: 6px 0; }
+code { background: var(--line); border-radius: 4px; padding: 2px 6px; overflow-wrap: anywhere; }
 a { color: var(--accent); }
 
 button.pic { background: none; padding: 0 2px; min-height: 0; font-size: 14px; line-height: 1; vertical-align: middle; }

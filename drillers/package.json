@@ -4,6 +4,6 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/engine.test.js",
-    "fuzz": "node test/ui-fuzz.mjs"
+    "fuzz": "node test/ui-fuzz.mjs && node test/online-fuzz.mjs"
   }
 }

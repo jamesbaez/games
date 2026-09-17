@@ -15,7 +15,7 @@ const app = {
   get innerHTML() { return html; },
   addEventListener(type, fn) { if (type === 'click') clickHandler = fn; },
 };
-globalThis.document = { getElementById: (id) => (id === 'app' ? app : fields[id] || null) };
+globalThis.document = { getElementById: (id) => (id === 'app' ? app : fields[id] || null), addEventListener() {}, visibilityState: 'visible' };
 const store = {};
 globalThis.localStorage = {
   getItem: (k) => store[k] ?? null,

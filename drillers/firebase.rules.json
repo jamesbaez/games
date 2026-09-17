@@ -1,0 +1,20 @@
+{
+  "rules": {
+    "rooms": {
+      "$code": {
+        ".read": true,
+        ".write": true,
+        ".validate": "$code.matches(/^[A-Z]{8}$/) && newData.child('host').isString() && newData.child('seq').isNumber() && newData.child('seq').val() === (data.exists() ? data.child('seq').val() + 1 : 0) && (!newData.child('state').exists() || (newData.child('state').isString() && newData.child('state').val().length < 200000))"
+      }
+    },
+    "seen": {
+      "$code": {
+        "$seat": {
+          ".read": true,
+          ".write": true,
+          ".validate": "$code.matches(/^[A-Z]{8}$/) && newData.isNumber()"
+        }
+      }
+    }
+  }
+}

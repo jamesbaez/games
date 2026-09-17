@@ -34,7 +34,7 @@ This summarizes the official rulebook (`ref/rulebook/`) plus the component photo
      - 1 drill collects a mineral on your floor, if storage has room.
      - The corridor cost excavates the top corridor tile: its minerals go onto the floor and the tile onto your track.
      - The barrier cost, while standing directly above a barrier, removes it: the tile goes onto your track, the floor card is revealed and resolved, and you move down for free.
-   - **Exhaust a mine tile** for its bottom effect (it loses its printed point loss). Battery tiles can't be exhausted this way; see buying.
+   - **Exhaust a mine tile** for its bottom effect (it loses its printed point loss), at any point during Operations but not later. Battery tiles can't be exhausted this way; see buying.
    - **Use a face-up drone** (flip it down) to sell 1 mineral or buy 1 card.
    - **Use abilities** of cards played this turn, or of permanent cards.
 2. **Surfacing** (only if Operations ended on the surface). In any order:

@@ -395,7 +395,7 @@ function dashHtml(s, p, mine) {
     const d = tileDef(t.id);
     const exLabel = d.ex === 'battery' ? '🔋' : fxText(d.ex);
     const label = `${d.barrier ? 'Barrier' : 'Corridor'} F${d.floor} ${d.pts - (t.ex ? d.loss : 0)}pt · ${exLabel}${t.ex ? ' (used)' : ''}`;
-    const canEx = mine && !t.ex && d.ex !== 'battery' && s.phase !== 'upkeep' && s.current === p.idx && !s.over;
+    const canEx = mine && !t.ex && d.ex !== 'battery' && s.phase === 'ops' && s.current === p.idx && !s.over;
     return `<span class="tile ${t.ex ? 'ex' : ''}">${label} ${pic('tiles/' + t.id)}${canEx ? ' ' + btn(`exhaust −${d.loss}pt`, { type: 'exhaust', index: i }, { cls: 'small' }) : ''}</span>`;
   }).join('');
   return `<div class="dash">
@@ -438,8 +438,10 @@ function endOpsBtns(s, p) {
     case 'chill':
       return B(`${label} (pay 1⛽)`, { chill: 'fuel' }, p.fuel < 1) + B(`${label} (take damage)`, { chill: 'damage' });
     case 'toys': {
-      const targets = [...p.hand, ...p.discard, p.deck[0]].filter((iid) => iid && cardDef(s, iid).pts < 0);
-      const extra = p.fuel >= 1 && p.storage.length ? targets.map((iid) => B(`${label} + repair ${esc(cardDef(s, iid).name)}`, { toys: iid })).join('') : '';
+      // any owned card, as the rulebook allows
+      const targets = [...p.hand.map((iid) => [iid, 'hand']), ...p.play.map((iid) => [iid, 'play area']),
+        ...p.discard.map((iid) => [iid, 'discard']), ...(p.deck[0] ? [[p.deck[0], 'top of deck']] : [])];
+      const extra = p.fuel >= 1 && p.storage.length ? targets.map(([iid, zone]) => B(`${label} + repair ${esc(cardDef(s, iid).name)} (${zone})`, { toys: iid })).join('') : '';
       return B(label) + extra;
     }
     default:
@@ -451,6 +453,7 @@ function actionsHtml(s, p) {
   const out = [];
   const fl = s.floors[p.floor];
   out.push(`<button class="secondary" ${session.undo.length ? '' : 'disabled'} data-lobby="undo">↶ Undo</button>`);
+  if (p.turn.repairs > 0 && s.phase !== 'upkeep') out.push(`<span class="muted">🔧 Repair with the button on a card in your hand, play area or top of deck, or under "Repair from discard pile".</span>`);
   if (s.phase === 'ops') {
     const collectCost = p.turn.passives.includes('suction') ? 'free' : '1⛏';
     const canCollect = (p.drills >= 1 || collectCost === 'free') && p.storage.length < p.storageMax;

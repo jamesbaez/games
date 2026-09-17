@@ -374,7 +374,7 @@ export function apply(state, action) {
   return s;
 }
 
-const OPS = new Set(['playMain', 'playFuel', 'default', 'move', 'collect', 'excavate', 'barrier', 'ability', 'droneSell', 'droneBuy', 'endOps']);
+const OPS = new Set(['playMain', 'playFuel', 'default', 'move', 'collect', 'excavate', 'barrier', 'ability', 'exhaust', 'droneSell', 'droneBuy', 'endOps']);
 const SURFACE = new Set(['sell', 'discardCard', 'upStorage', 'upFuel', 'refuel', 'buy', 'refreshShop', 'endSurface']);
 
 function step(s, a) {

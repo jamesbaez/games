@@ -267,6 +267,50 @@ function botTurn(s) {
   return s;
 }
 
+test('mine tiles can only be exhausted during Operations', () => {
+  let s = newGame();
+  Object.assign(s.players[0], { floor: 2, drills: 2 });
+  s = apply(s, { p: 0, type: 'excavate' });
+  const tile = s.players[0].tiles[0];
+  assert.equal(tile.ex, false);
+
+  const surfaced = structuredClone(s);
+  surfaced.players[0].floor = 0;
+  const inSurfacing = apply(surfaced, { p: 0, type: 'endOps', opt: {} });
+  assert.equal(inSurfacing.phase, 'surface');
+  expectError(() => apply(inSurfacing, { p: 0, type: 'exhaust', index: 0 }));
+
+  const used = apply(s, { p: 0, type: 'exhaust', index: 0 });
+  assert.equal(used.players[0].tiles[0].ex, true);
+});
+
+test("floor card: Toys R' Rust repairs a card from any zone", () => {
+  const base = newGame();
+  base.floors[2].card = 'toys';
+  base.floors[2].cardUp = true;
+  Object.assign(base.players[0], { floor: 2, fuel: 5, storage: ['silver'] });
+
+  // The rulebook allows hand, play area, discard pile and the top of the deck.
+  for (const zone of ['hand', 'play', 'discard', 'deck']) {
+    const s = structuredClone(base);
+    const p = s.players[0];
+    const iid = giveCard(s, 'damage'); // lands in hand
+    if (zone !== 'hand') {
+      p.hand = p.hand.filter((x) => x !== iid);
+      if (zone === 'deck') p.deck.unshift(iid); else p[zone].push(iid);
+    }
+    const after = apply(s, { p: 0, type: 'endOps', opt: { toys: iid } });
+    const q = after.players[0];
+    assert.equal([...q.hand, ...q.play, ...q.discard, ...q.deck].includes(iid), false, `${zone} card should be repaired away`);
+    assert.equal(q.fuel, 4);
+    assert.deepEqual(q.storage, []);
+    assert.equal(after.damagePile, s.damagePile + 1);
+  }
+
+  const s = structuredClone(base);
+  expectError(() => apply(s, { p: 0, type: 'endOps', opt: { toys: s.players[1].hand[0] } })); // not your card
+});
+
 test('bot games run to completion without engine errors', () => {
   for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
     let s = newGame(seed);

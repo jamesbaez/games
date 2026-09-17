@@ -267,21 +267,23 @@ function botTurn(s) {
   return s;
 }
 
-test('mine tiles can only be exhausted during Operations', () => {
+test('mine tiles can be exhausted while surfacing, to pay for cards', () => {
   let s = newGame();
   Object.assign(s.players[0], { floor: 2, drills: 2 });
   s = apply(s, { p: 0, type: 'excavate' });
-  const tile = s.players[0].tiles[0];
-  assert.equal(tile.ex, false);
+  assert.equal(s.players[0].tiles[0].ex, false);
 
-  const surfaced = structuredClone(s);
-  surfaced.players[0].floor = 0;
-  const inSurfacing = apply(surfaced, { p: 0, type: 'endOps', opt: {} });
-  assert.equal(inSurfacing.phase, 'surface');
-  expectError(() => apply(inSurfacing, { p: 0, type: 'exhaust', index: 0 }));
+  const inOps = apply(s, { p: 0, type: 'exhaust', index: 0 });
+  assert.equal(inOps.players[0].tiles[0].ex, true);
 
-  const used = apply(s, { p: 0, type: 'exhaust', index: 0 });
-  assert.equal(used.players[0].tiles[0].ex, true);
+  // The rulebook (p. 9) allows exhausting during Surfacing too, usually to pay costs.
+  s.players[0].floor = 0;
+  let surfacing = apply(s, { p: 0, type: 'endOps', opt: {} });
+  assert.equal(surfacing.phase, 'surface');
+  const before = surfacing.players[0].credits;
+  surfacing = apply(surfacing, { p: 0, type: 'exhaust', index: 0 });
+  assert.equal(surfacing.players[0].tiles[0].ex, true);
+  assert.ok(surfacing.players[0].credits > before || surfacing.players[0].fuel > 0);
 });
 
 test("floor card: Toys R' Rust repairs a card from any zone", () => {

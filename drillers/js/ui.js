@@ -395,7 +395,7 @@ function dashHtml(s, p, mine) {
     const d = tileDef(t.id);
     const exLabel = d.ex === 'battery' ? '🔋' : fxText(d.ex);
     const label = `${d.barrier ? 'Barrier' : 'Corridor'} F${d.floor} ${d.pts - (t.ex ? d.loss : 0)}pt · ${exLabel}${t.ex ? ' (used)' : ''}`;
-    const canEx = mine && !t.ex && d.ex !== 'battery' && s.phase === 'ops' && s.current === p.idx && !s.over;
+    const canEx = mine && !t.ex && d.ex !== 'battery' && s.phase !== 'upkeep' && s.current === p.idx && !s.over;
     return `<span class="tile ${t.ex ? 'ex' : ''}">${label} ${pic('tiles/' + t.id)}${canEx ? ' ' + btn(`exhaust −${d.loss}pt`, { type: 'exhaust', index: i }, { cls: 'small' }) : ''}</span>`;
   }).join('');
   return `<div class="dash">

@@ -378,6 +378,20 @@ function mineHtml(s, me) {
   return `<div class="mine">${rows.join('')}</div>`;
 }
 
+// Resources at a glance: in the pinned bar for you, on the dashboard for other players.
+function statsHtml(p) {
+  return `<div class="stats">
+      <span>⛽ <b>${p.fuel}</b>/${p.fuelMax}</span>
+      <span>↕️ <b>${p.moves}</b></span>
+      <span>⛏ <b>${p.drills}</b></span>
+      <span>💰 <b>${p.credits}</b></span>
+      <span>🤖 ${p.drones.map((d) => (d ? '●' : '○')).join('')}</span>
+      <span>${floorLabel(p.floor)}</span>
+      ${p.turn.repairs ? `<span class="good">🔧 ${p.turn.repairs} free repair${p.turn.repairs > 1 ? 's' : ''}</span>` : ''}
+    </div>
+    <div>Storage (${p.storage.length}/${p.storageMax}): ${p.storage.map(gem).join('') || '<span class="muted">empty</span>'}</div>`;
+}
+
 function dashHtml(s, p, mine) {
   const nextFuel = D.FUEL.upgradeCosts[p.fuelMax - D.FUEL.startMax];
   const market = D.MINERALS.map((m) => {
@@ -399,16 +413,7 @@ function dashHtml(s, p, mine) {
     return `<span class="tile ${t.ex ? 'ex' : ''}">${label} ${pic('tiles/' + t.id)}${canEx ? ' ' + btn(`exhaust −${d.loss}pt`, { type: 'exhaust', index: i }, { cls: 'small' }) : ''}</span>`;
   }).join('');
   return `<div class="dash">
-    <div class="stats">
-      <span>⛽ <b>${p.fuel}</b>/${p.fuelMax}</span>
-      <span>↕️ <b>${p.moves}</b></span>
-      <span>⛏ <b>${p.drills}</b></span>
-      <span>💰 <b>${p.credits}</b></span>
-      <span>🤖 ${p.drones.map((d) => (d ? '●' : '○')).join('')}</span>
-      <span>${floorLabel(p.floor)}</span>
-      ${p.turn.repairs ? `<span class="good">🔧 ${p.turn.repairs} free repair${p.turn.repairs > 1 ? 's' : ''}</span>` : ''}
-    </div>
-    <div>Storage (${p.storage.length}/${p.storageMax}): ${p.storage.map(gem).join('') || '<span class="muted">empty</span>'}</div>
+    ${mine ? '' : statsHtml(p)}
     <div class="market">${market}</div>
     <div>Progress ${used}/${limit} <span class="muted">(overflow ${p.overflow.length}/${D.OVERFLOW_SLOTS})</span> ${miles} ${pic('milestones')}</div>
     <div class="bar"><div style="width:${Math.min(100, (used / D.TRACK_LENGTH) * 100)}%"></div><div class="ovf" style="width:${(Math.min(p.overflow.length, D.OVERFLOW_SLOTS) / D.TRACK_LENGTH) * 100}%"></div></div>
@@ -610,10 +615,13 @@ function renderGame() {
       <div><a href="${RULEBOOK}" target="_blank" rel="noopener">Rules</a> ${session.mode === 'local' ? '<button class="small secondary" data-lobby="move">Move device</button>' : ''} <button class="small secondary" data-lobby="leave">Menu</button></div>
     </header>
     ${session.mode === 'online' ? alertsHtml() : ''}
-    ${s.over ? `<section><h2>Game over — ${esc(s.players[s.winner].name)} wins!</h2>${scoresHtml(s)}</section>` : `
-    <div class="turn ${myTurn ? 'mine' : ''}">Turn ${s.turnNo}: <b>${esc(cur.name)}</b> — ${phaseName}${myTurn ? ' (you)' : ''}</div>`}
+    ${s.over ? `<section><h2>Game over — ${esc(s.players[s.winner].name)} wins!</h2>${scoresHtml(s)}</section>` : ''}
     ${s.endBy !== null && !s.over ? '<div class="alert">The mine is collapsing — final turns!</div>' : ''}
-    ${message ? `<div class="alert">${esc(message)}</div>` : ''}
+    <div class="hud ${myTurn ? 'mine' : ''}">
+      ${s.over ? '' : `<div class="turn">Turn ${s.turnNo}: <b>${esc(cur.name)}</b> — ${phaseName}${myTurn ? ' (you)' : ''}</div>`}
+      ${statsHtml(me)}
+      ${message ? `<div class="alert">${esc(message)}</div>` : ''}
+    </div>
     <div class="layout">
       <section class="col">
         <h2>Mine ${pic('board')}</h2>

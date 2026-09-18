@@ -109,7 +109,7 @@ const c = (id, name, shop, o) => ({ id, name, shop, cost: 0, bat: false, fuel: 0
 export const CARDS = [
   // Starting deck (one each per player, plus 1 DAMAGE)
   c('vintage_drill', 'Vintage Drill', 'start', { fuel: 3, play: 0, fx: { drills: 1, removeSelf: true }, text: 'Remove this card from the game.' }),
-  c('torso', 'Torso', 'start', { fuel: 2, play: 1, choose: [{ label: '1⛏', fx: { drills: 1 } }, { label: '1↕️', fx: { moves: 1 } }] }),
+  c('torso', 'Torso', 'start', { fuel: 2, play: 1, choose: [{ label: '1⛏', fx: { drills: 1 } }, { label: '2↕️', fx: { moves: 2 } }] }),
   c('crutch', 'Crutch', 'start', { fuel: 2, play: 0, fx: { moves: 1 }, pts: -2 }),
   c('spider_leg', 'Spider Leg', 'start', { fuel: 2, play: 1, fx: { moves: 2 }, pts: -1 }),
   c('claw', 'Claw', 'start', { fuel: 2, play: 1, fx: { drills: 1 }, pts: -2 }),

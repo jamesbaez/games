@@ -92,7 +92,7 @@ test('choice cards apply the chosen option', () => {
   assert.equal(a.players[0].drills, 1);
   assert.equal(a.players[0].moves, 0);
   const b = apply(s, { p: 0, type: 'playMain', iid: torso, option: 1 });
-  assert.equal(b.players[0].moves, 1);
+  assert.equal(b.players[0].moves, 2);
 });
 
 test('card repairs are free and remove damage from the game', () => {

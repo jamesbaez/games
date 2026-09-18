@@ -20,12 +20,14 @@ const RELOADING = 'Reloading the game, try again in a moment.';
 //   confirmed: the latest state known to be saved, saving: promise chain of writes, gen: bumped to drop queued writes.
 let session = null;
 let message = '';
-let keep = new Set();
+let keep = null; // upkeep cards ticked to keep; null until the player touches a box (see kept())
 let passCurtain = null; // local mode: index of player we're waiting to hand the phone to
 let pendingMove = null; // { mode: 'local', state } from a #move= link, waiting for confirmation
 let seatPick = null; // { code, room } while choosing how this device joins an online game
 let busy = false; // a lobby request is in flight; ignore repeat taps
 
+// Cards ticked to keep. Until the player changes a box, every card is ticked if they are all free to keep.
+const kept = (p) => keep ?? new Set(p.hand.length <= p.turn.keepFree ? p.hand : []);
 const esc = (x) => String(x).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 const MIN_ABBR = { silver: 'Ag', gold: 'Au', sapphire: 'Sa', emerald: 'Em', ruby: 'Ru' };
 const gem = (m) => `<span class="gem gem-${m}" title="${m}">${MIN_ABBR[m]}</span>`;
@@ -161,7 +163,7 @@ function receive(me, room) {
   if (room.state && !savedState(room.state)) { me.status = 'This game was saved by an older version and cannot continue.'; render(); return; }
   if (room.seq <= me.seq) return; // our own save coming back, or older news
   if (me.seq >= 0) message = ''; // keep the "did not save" message after a reload
-  if (me.state?.current !== room.state?.current) keep = new Set();
+  if (me.state?.current !== room.state?.current) keep = null;
   Object.assign(me, { seq: room.seq, host: room.host, state: room.state, confirmed: room.state, undo: [] });
   render();
 }
@@ -184,7 +186,7 @@ function save(me, prev, next) {
     Object.assign(me, { seq: -1, state: me.confirmed, undo: [] });
     if (session !== me) return;
     message = 'Your last move did not save (offline, or the game changed on another device). Reloading the game…';
-    keep = new Set();
+    keep = null;
     render();
     me.net.resume();
   });
@@ -282,7 +284,7 @@ function show(next) {
     LS.set('drillers.local', next);
     if (next.current !== prev.current && !next.over) passCurtain = next.current;
   }
-  if (next.current !== prev.current) keep = new Set();
+  if (next.current !== prev.current) keep = null;
   render();
 }
 
@@ -490,9 +492,13 @@ function actionsHtml(s, p) {
     out.push(btn(`Upgrade fuel tank (${fc ?? '—'}c)`, { type: 'upFuel' }, { disabled: fc === undefined || p.credits < fc }));
     out.push(btn('Done surfacing → Upkeep', { type: 'endSurface' }, { cls: 'primary' }));
   } else if (s.phase === 'upkeep') {
-    const cost = Math.max(0, keep.size - p.turn.keepFree);
+    const k = kept(p);
+    const cost = Math.max(0, k.size - p.turn.keepFree);
+    const unused = Math.min(p.turn.keepFree, p.hand.length) - k.size;
     out.push(`<span class="muted">Tick cards in hand to keep (${p.turn.keepFree} free, then 1⛽ each).</span>`);
-    out.push(btn(`End turn${keep.size ? ` (keep ${keep.size}, ${cost}⛽)` : ''}`, { type: 'endTurn', keep: [...keep] }, { cls: 'primary', disabled: p.fuel < cost }));
+    if (unused > 0) out.push(`<span class="warn">You can keep ${unused} more card${unused > 1 ? 's' : ''} for free. You still draw 3 next turn.</span>`);
+    const label = unused > 0 ? ` (${unused} free keep${unused > 1 ? 's' : ''} unused)` : k.size ? ` (keep ${k.size}, ${cost}⛽)` : '';
+    out.push(btn(`End turn${label}`, { type: 'endTurn', keep: [...k] }, { cls: 'primary', disabled: p.fuel < cost }));
   }
   return `<div class="actions">${out.join('')}</div>`;
 }
@@ -513,7 +519,7 @@ function handHtml(s, p, myTurn) {
     if (myTurn && s.phase === 'surface') b += btn(`Discard +${D.DISCARD_CREDITS}c`, { type: 'discardCard', iid }, { cls: 'secondary' });
     if (myTurn) b += repairBtn(s, p, iid);
     if (myTurn && s.phase === 'upkeep') {
-      b += `<label class="keep"><input type="checkbox" id="keep-${iid}" data-keep="${iid}" ${keep.has(iid) ? 'checked' : ''}> keep</label>`;
+      b += `<label class="keep"><input type="checkbox" id="keep-${iid}" data-keep="${iid}" ${kept(p).has(iid) ? 'checked' : ''}> keep</label>`;
     }
     return cardHtml(s, iid, b);
   }).join('') || '<p class="muted">No cards in hand.</p>';
@@ -699,6 +705,8 @@ app.addEventListener('click', (e) => {
 app.addEventListener('change', (e) => {
   const k = e.target.dataset?.keep;
   if (!k) return;
+  const s = session.state;
+  keep = new Set(kept(s.players[s.current]));
   if (e.target.checked) keep.add(k); else keep.delete(k);
   render();
 });

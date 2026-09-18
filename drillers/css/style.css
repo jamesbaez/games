@@ -10,6 +10,7 @@ h1 { font-size: 28px; margin: 12px 0; color: var(--accent); }
 h2 { font-size: 16px; margin: 16px 0 6px; color: var(--accent); }
 h3 { font-size: 14px; margin: 12px 0 6px; }
 .muted { color: var(--muted); }
+.warn { color: var(--bad); }
 button {
   background: var(--accent); color: #1b1d22; border: 0; border-radius: 6px; padding: 8px 10px;
   font: inherit; font-weight: 600; cursor: pointer; min-height: 36px;

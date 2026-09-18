@@ -90,12 +90,15 @@ export function setup({ names, seed = Date.now(), first }) {
       drones: [true, false, false], refreshTile: true, credits: 0,
       moves: 0, drills: 0, turn: freshTurn(),
     };
-    draw(s, p, D.HAND_SIZE);
     return p;
   });
-  // Random first player (drawn after all shuffles); starting credits follow turn order.
+  // Random first player (drawn after all shuffles); starting credits and cards follow turn order.
   s.current = first ?? Math.floor(rand(s) * n);
-  s.players.forEach((p, i) => { p.credits = D.STARTING_CREDITS[n][(i - s.current + n) % n]; });
+  s.players.forEach((p, i) => {
+    const order = (i - s.current + n) % n;
+    p.credits = D.STARTING_CREDITS[n][order];
+    draw(s, p, D.STARTING_CARDS[n][order]);
+  });
   log(s, `Game started. ${s.players[s.current].name} goes first.`);
   return s;
 }

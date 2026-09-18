@@ -14,7 +14,7 @@ This summarizes the official rulebook (`ref/rulebook/`) plus the component photo
 - **Player:** 8 starting cards + 1 DAMAGE, with TORSO first.
   - Fuel starts at 10/10. Storage holds 2 (max 7).
   - 3 drones (1 face up). A shop refresh tile.
-  - The first player is chosen at random. 2-player starting credits by turn order: 3 / 4.
+  - The first player is chosen at random. Starting resources by turn order (rulebook setup step 16): 2p 2 credits + 3 cards / 4 credits + 4 cards; 3p credits 2 / 3 / 5, cards 3 / 4 / 4; 4p credits 2 / 5 / 4 / 7, cards 3 / 3 / 4 / 4.
 - **Minerals:**
 
 | | silver | gold | sapphire | emerald | ruby |
@@ -115,5 +115,4 @@ This summarizes the official rulebook (`ref/rulebook/`) plus the component photo
 
 ## Uncertain or unverified
 
-- **Starting hand:** the rulebook's starting-resource table gives per-seat numbers (2p: 3 / 4). These are implemented as credits, with every player drawing 3 cards.
 - **Solo mode** is not implemented. Its rules are on the rulebook's final pages.

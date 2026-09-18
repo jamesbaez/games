@@ -47,13 +47,15 @@ test('revealsInfo: plain moves are undoable, draws/excavation/turn end are not',
   assert.equal(revealsInfo(e2, apply(e2, { p: 0, type: 'endTurn', keep: [] })), true);
 });
 
-test('first player is random and starting credits follow turn order', () => {
+test('first player is random and starting credits and cards follow turn order', () => {
   const firsts = new Set();
   for (let seed = 1; seed <= 40; seed++) {
     const s = setup({ names: ['Ann', 'Bob'], seed });
     firsts.add(s.current);
-    assert.equal(s.players[s.current].credits, 3);
+    assert.equal(s.players[s.current].credits, 2);
     assert.equal(s.players[1 - s.current].credits, 4);
+    assert.equal(s.players[s.current].hand.length, 3);
+    assert.equal(s.players[1 - s.current].hand.length, 4);
   }
   assert.deepEqual([...firsts].sort(), [0, 1]);
 });
@@ -61,11 +63,11 @@ test('first player is random and starting credits follow turn order', () => {
 test('setup deals hands with TORSO first and correct credits', () => {
   const s = newGame();
   for (const p of s.players) {
-    assert.equal(p.hand.length, 3);
     assert.equal(s.cards[p.hand[0]], 'torso');
     assert.equal(p.deck.length + p.hand.length, 9);
   }
-  assert.deepEqual(s.players.map((p) => p.credits), [3, 4]);
+  assert.deepEqual(s.players.map((p) => p.hand.length), [3, 4]);
+  assert.deepEqual(s.players.map((p) => p.credits), [2, 4]);
   assert.equal(s.floors[2].cardUp, true);
   assert.ok(s.floors.slice(3).every((f) => f.barrier && f.card));
   assert.equal(s.shops.adv.row.length, 2);
@@ -106,7 +108,7 @@ test('card repairs are free and remove damage from the game', () => {
   s = apply(s, { p: 0, type: 'repair', iid: dmg });
   assert.equal(s.damagePile, pile + 1);
   assert.ok(!s.players[0].hand.includes(dmg));
-  assert.equal(s.players[0].credits, 3);
+  assert.equal(s.players[0].credits, 2);
 });
 
 test('excavating a corridor adds minerals and a tile', () => {
@@ -141,7 +143,7 @@ test('market pays falling prices then overflow', () => {
   s.phase = 'surface';
   s = apply(s, { p: 0, type: 'sell' });
   const q = s.players[0];
-  assert.equal(q.credits, 3 + 8 + 8 + 7 + 6);
+  assert.equal(q.credits, 2 + 8 + 8 + 7 + 6);
   assert.equal(q.market.emerald, 3);
   assert.deepEqual(q.overflow, ['emerald']);
 });

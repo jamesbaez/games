@@ -18,7 +18,9 @@ export const REPAIR_COST = 5;
 export const DISCARD_CREDITS = 2;
 export const HAND_SIZE = 3;
 export const DAMAGE_CARDS = 14;
-export const STARTING_CREDITS = { 1: [3], 2: [3, 4], 3: [3, 4, 4], 4: [3, 3, 4, 4] };
+// Starting resources by player count, indexed by turn order (rulebook setup step 16).
+export const STARTING_CREDITS = { 1: [2], 2: [2, 4], 3: [2, 3, 5], 4: [2, 5, 4, 7] };
+export const STARTING_CARDS = { 1: [3], 2: [3, 4], 3: [3, 4, 4], 4: [3, 3, 4, 4] };
 
 // Progress track, in notches (one notch = one overflow slot). Milestone lines sit
 // at roughly 4.5 / 9.4 / 14.2 notches, so covering them takes 5 / 10 / 15.

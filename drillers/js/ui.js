@@ -470,15 +470,16 @@ function actionsHtml(s, p) {
   out.push(`<button class="secondary" ${session.undo.length ? '' : 'disabled'} data-lobby="undo">↶ Undo</button>`);
   if (p.turn.repairs > 0 && s.phase !== 'upkeep') out.push(`<span class="muted">🔧 Repair with the button on a card in your hand, play area or top of deck, or under "Discard pile".</span>`);
   if (s.phase === 'ops') {
-    const collectCost = p.turn.passives.includes('suction') ? 'free' : '1⛏';
-    const canCollect = (p.drills >= 1 || collectCost === 'free') && p.storage.length < p.storageMax;
+    const suction = p.turn.passives.includes('suction');
+    const collectCost = m => suction && m === 'silver' ? 'free' : '1⛏';
+    const canCollect = m => (p.drills >= 1 || collectCost(m) === 'free') && p.storage.length < p.storageMax;
     out.push(btn('▲ Up', { type: 'move', dir: -1 }, { disabled: p.moves < 1 || p.floor === 0 }));
     out.push(btn('▼ Down', { type: 'move', dir: 1 }, { disabled: p.moves < 1 || p.floor === 6 || s.floors[p.floor + 1]?.barrier }));
     for (const m of new Set(fl.minerals)) {
-      out.push(btn(`Collect ${gem(m)} (${collectCost})`, { type: 'collect', mineral: m }, { disabled: !canCollect }));
-      if (activeFloorCard(s, p.floor) === 'lobby') out.push(btn(`Collect ${gem(m)} + 1c→1⛽`, { type: 'collect', mineral: m, pay: true }, { disabled: !canCollect || p.credits < 1 }));
+      out.push(btn(`Collect ${gem(m)} (${collectCost(m)})`, { type: 'collect', mineral: m }, { disabled: !canCollect(m) }));
+      if (activeFloorCard(s, p.floor) === 'lobby') out.push(btn(`Collect ${gem(m)} + 1c→1⛽`, { type: 'collect', mineral: m, pay: true }, { disabled: !canCollect(m) || p.credits < 1 }));
     }
-    if (fl.jackpot?.[p.idx]) out.push(btn(`Collect your Jackpot ${gem('emerald')} (${collectCost})`, { type: 'collect', jackpot: true }, { disabled: !canCollect }));
+    if (fl.jackpot?.[p.idx]) out.push(btn(`Collect your Jackpot ${gem('emerald')} (1⛏)`, { type: 'collect', jackpot: true }, { disabled: !canCollect('emerald') }));
     if (fl.corridors.length) {
       const hot = activeFloorCard(s, p.floor) === 'hottub' && !p.turn.floorUsed.hottub;
       const cost = D.FLOORS[p.floor].corridorCost - (hot ? 1 : 0);

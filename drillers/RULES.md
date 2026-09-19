@@ -82,7 +82,7 @@ This summarizes the official rulebook (`ref/rulebook/`) plus the component photo
 **Card abilities and passives**
 - **Harpoon Drill** (1x): spend 1 drill to collect from an adjacent open floor. That floor's collect trigger fires.
 - **Superior Soaker** (1x): upgrade one stored mineral one step (silver → gold → sapphire → emerald → ruby).
-- **Suction Engine:** collecting costs no drills for the rest of the turn (Jackpot emeralds included).
+- **Suction Engine:** collecting silver costs no drills for the rest of the turn. The card shows the silver icon, not the any-mineral icon; other minerals still cost 1 drill.
 - **Flywheel:** on play, gain fuel equal to the cards already burned for fuel this turn; each later burn this turn gives +1 fuel.
 - **Jackhammer:** after it's played, each corridor or barrier drilled this turn gives +1 fuel.
 - **Requirements:** Wrecking Ball needs 3 moves gained this turn; Recoil Capacitor needs 3 drills gained. "Gained" counts cards, abilities, exhausted tiles and default functions.

@@ -138,7 +138,7 @@ export const CARDS = [
   c('flywheel', 'Flywheel', 'move', { cost: 3, fuel: 4, play: 1, fx: { moves: 3 }, passive: 'flywheel', text: 'Gain 1 fuel for each card you play (or have played) this turn just to gain fuel.' }),
   c('hover_pads', 'Hover Pads', 'move', { cost: 8, perm: true, ability: { limit: '1x', gain: { moves: 1 } }, text: 'Permanent. 1x: gain 1 move.' }),
   c('atm_drone', 'ATM Drone', 'move', { cost: 3, fuel: 3, play: 1, fx: { moves: 1, drone: 1, credits: 7 } }),
-  c('suction_engine', 'Suction Engine', 'move', { cost: 6, fuel: 4, play: 2, fx: { moves: 4 }, passive: 'suction', text: "This turn, collecting minerals doesn't cost drills." }),
+  c('suction_engine', 'Suction Engine', 'move', { cost: 6, fuel: 4, play: 2, fx: { moves: 4 }, passive: 'suction', text: "This turn, collecting silver doesn't cost drills." }),
   c('panic_button', 'Panic Button', 'move', { cost: 0, fuel: 3, play: 0, fx: { moves: 4, damage: 1 } }),
   c('wheels_on_heels', 'Wheels on Heels', 'move', { cost: 5, fuel: 3, play: 1, fx: { moves: 2, draw: 1 } }),
   c('rocket_drone', 'Rocket Drone', 'move', { cost: 4, fuel: 3, play: 1, fx: { moves: 3, drone: 1 } }),

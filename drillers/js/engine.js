@@ -459,7 +459,7 @@ function step(s, a) {
     }
     case 'collect': {
       const fl = s.floors[p.floor];
-      const free = p.turn.passives.includes('suction');
+      const free = !a.jackpot && a.mineral === 'silver' && p.turn.passives.includes('suction');
       if (!free && p.drills < 1) fail('Need 1 drill.');
       if (p.storage.length >= p.storageMax) fail('Storage is full.');
       if (a.jackpot) {

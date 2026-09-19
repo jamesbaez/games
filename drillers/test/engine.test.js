@@ -126,6 +126,22 @@ test('excavating a corridor adds minerals and a tile', () => {
   assert.equal(trackUsed(s.players[0]), 2);
 });
 
+test('Suction Engine makes only silver free to collect', () => {
+  let s = newGame();
+  s = apply(s, { p: 0, type: 'playMain', iid: giveCard(s, 'suction_engine') });
+  s.players[0].floor = 2;
+  s.players[0].drills = 0;
+  s.floors[2].minerals = ['silver', 'silver', 'gold'];
+  s.players[0].storageMax = 3;
+  s = apply(s, { p: 0, type: 'collect', mineral: 'silver' });
+  s = apply(s, { p: 0, type: 'collect', mineral: 'silver' });
+  assert.deepEqual(s.players[0].storage, ['silver', 'silver']);
+  expectError(() => apply(s, { p: 0, type: 'collect', mineral: 'gold' }));
+  s.players[0].drills = 1;
+  s = apply(s, { p: 0, type: 'collect', mineral: 'gold' });
+  assert.equal(s.players[0].drills, 0);
+});
+
 test('barrier removal opens the floor, moves the mech, expands advanced shop at floor 4', () => {
   let s = newGame();
   const p = s.players[0];

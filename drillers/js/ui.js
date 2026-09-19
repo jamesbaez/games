@@ -13,6 +13,14 @@ const RULEBOOK = 'https://filemanager.czechgames.com/storage/files/drillers/rule
 const OFFLINE = 'Could not reach the game server. Check your connection and try again.';
 const RELOADING = 'Reloading the game, try again in a moment.';
 
+// Re-renders replace #app, so remember which <details data-keep="name"> sections are open.
+const openSections = new Set();
+const keepOpen = (name) => `data-keep="${name}"${openSections.has(name) ? ' open' : ''}`;
+app.addEventListener('toggle', (e) => {
+  const name = e.target.dataset?.keep;
+  if (name) e.target.open ? openSections.add(name) : openSections.delete(name);
+}, true);
+
 // session: { mode: 'local'|'online'|'moved', state, status, undo, url }
 // undo: earlier states of this device's current turn, cleared when hidden info is revealed.
 // Online sessions also have: code, seat, host, net, beat (presence timer),
@@ -460,7 +468,7 @@ function actionsHtml(s, p) {
   const out = [];
   const fl = s.floors[p.floor];
   out.push(`<button class="secondary" ${session.undo.length ? '' : 'disabled'} data-lobby="undo">↶ Undo</button>`);
-  if (p.turn.repairs > 0 && s.phase !== 'upkeep') out.push(`<span class="muted">🔧 Repair with the button on a card in your hand, play area or top of deck, or under "Repair from discard pile".</span>`);
+  if (p.turn.repairs > 0 && s.phase !== 'upkeep') out.push(`<span class="muted">🔧 Repair with the button on a card in your hand, play area or top of deck, or under "Discard pile".</span>`);
   if (s.phase === 'ops') {
     const collectCost = p.turn.passives.includes('suction') ? 'free' : '1⛏';
     const canCollect = (p.drills >= 1 || collectCost === 'free') && p.storage.length < p.storageMax;
@@ -579,7 +587,7 @@ function scoresHtml(s) {
 
 function alertsHtml() {
   const topic = alertTopic(session.code, session.seat);
-  return `<details class="alerts"><summary>🔔 Turn alerts</summary>
+  return `<details class="alerts" ${keepOpen('alerts')}><summary>🔔 Turn alerts</summary>
     <p>To get a notification when it's your turn, even with this page closed, install the free <b>ntfy</b> app (iPhone or Android), tap + and subscribe to:</p>
     <p><code>${esc(topic)}</code> <button class="small secondary" data-lobby="copy" data-text="${esc(topic)}">Copy</button></p>
     <p class="muted">On a laptop, open <a href="https://ntfy.sh/${esc(topic)}" target="_blank" rel="noopener">ntfy.sh/${esc(topic)}</a> and allow notifications. No alert is sent while this game is on your screen.</p>
@@ -643,11 +651,11 @@ function renderGame() {
         ${top ? `<h3>Top of your deck</h3><div class="cards">${cardHtml(s, top, myTurn ? repairBtn(s, me, top) : '')}</div>` : ''}
         ${me.play.length ? `<h3>Play area</h3><div class="cards">${playAreaHtml(s, me, myTurn)}</div>` : ''}
         ${me.perms.length ? `<h3>Permanent cards</h3><div class="cards">${me.perms.map((iid) => cardHtml(s, iid, myTurn ? abilityBtns(s, me, iid) : '')).join('')}</div>` : ''}
-        ${canRepair && me.discard.length ? `<details><summary>Repair from discard pile</summary><div class="cards">${me.discard.map((iid) => cardHtml(s, iid, repairBtn(s, me, iid))).join('')}</div></details>` : ''}
+        ${me.discard.length ? `<details ${keepOpen('discard')}><summary>Discard pile (${me.discard.length})${canRepair ? ' · repair from here' : ''}</summary><div class="cards">${me.discard.map((iid) => cardHtml(s, iid, canRepair ? repairBtn(s, me, iid) : '')).join('')}</div></details>` : ''}
         <h2>Shops</h2>
         ${shopsHtml(s, me, myTurn)}
         ${others.map((o) => `<h2>${esc(o.name)}</h2>${dashHtml(s, o, false)}`).join('')}
-        ${!s.over ? `<details><summary>Current score estimate</summary>${scoresHtml(s)}</details>` : ''}
+        ${!s.over ? `<details ${keepOpen('score')}><summary>Current score estimate</summary>${scoresHtml(s)}</details>` : ''}
       </section>
     </div>`;
 }

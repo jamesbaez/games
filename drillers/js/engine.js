@@ -200,6 +200,8 @@ function upFuel(p) { if (p.fuelMax - D.FUEL.startMax < D.FUEL.upgradeCosts.lengt
 function applyFx(s, p, fx = {}, iid) {
   if (fx.moves) { p.moves += fx.moves; p.turn.movesGained += fx.moves; }
   if (fx.drills) { p.drills += fx.drills; p.turn.drillsGained += fx.drills; }
+  // Effects resolve in any order (rulebook p. 8), so raise the cap before gaining fuel.
+  if (fx.upFuel) upFuel(p);
   if (fx.fuel) gainFuel(p, fx.fuel);
   if (fx.credits) p.credits += fx.credits;
   for (let i = 0; i < (fx.drone || 0); i++) refreshDrone(p);
@@ -208,7 +210,6 @@ function applyFx(s, p, fx = {}, iid) {
   for (let i = 0; i < (fx.damageTop || 0); i++) giveDamage(s, p, 'top');
   for (let i = 0; i < (fx.damageHand || 0); i++) giveDamage(s, p, 'hand');
   if (fx.upStorage) upStorage(p);
-  if (fx.upFuel) upFuel(p);
   if (fx.repair) p.turn.repairs += fx.repair;
   if (fx.removeSelf && iid) {
     p.play = p.play.filter((x) => x !== iid);

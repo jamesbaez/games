@@ -86,6 +86,7 @@ This summarizes the official rulebook (`ref/rulebook/`) plus the component photo
 - **Flywheel:** on play, gain fuel equal to the cards already burned for fuel this turn; each later burn this turn gives +1 fuel.
 - **Jackhammer:** after it's played, each corridor or barrier drilled this turn gives +1 fuel.
 - **Requirements:** Wrecking Ball needs 3 moves gained this turn; Recoil Capacitor needs 3 drills gained. "Gained" counts cards, abilities, exhausted tiles and default functions.
+- **Free fuel-cap upgrades** (Refuelling Drone, Ultrahot Furnace): the cap goes up before the card's fuel is added, since a card's effects can resolve in any order (rulebook p. 8).
 - **Antigravity Drive:** move to any open floor, the surface included, for free.
 
 **Floor cards**

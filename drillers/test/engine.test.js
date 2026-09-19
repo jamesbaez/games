@@ -142,6 +142,15 @@ test('Suction Engine makes only silver free to collect', () => {
   assert.equal(s.players[0].drills, 0);
 });
 
+test('free fuel-cap upgrades apply before the fuel gain', () => {
+  let s = newGame();
+  const p = s.players[0];
+  p.fuel = p.fuelMax;
+  s = apply(s, { p: 0, type: 'playMain', iid: giveCard(s, 'refuelling_drone') });
+  assert.equal(s.players[0].fuelMax, p.fuelMax + 1);
+  assert.equal(s.players[0].fuel, p.fuelMax + 1);
+});
+
 test('barrier removal opens the floor, moves the mech, expands advanced shop at floor 4', () => {
   let s = newGame();
   const p = s.players[0];

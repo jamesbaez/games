@@ -407,7 +407,9 @@ function dashHtml(s, p, mine) {
   const market = D.MINERALS.map((m) => {
     const n = p.market[m];
     const next = n < 3 ? D.MARKET_PRICES[m][n] : D.OVERFLOW_PRICE[m];
-    return `<span class="mk">${gem(m)}${n}/3 <small>next ${next}c</small></span>`;
+    // Count overflow too, so 5/3 means 3 in the market and 2 in overflow.
+    const total = n + p.overflow.filter((x) => x === m).length;
+    return `<span class="mk">${gem(m)}${total}/3 <small>next ${next}c</small></span>`;
   }).join('');
   const used = trackUsed(p);
   const limit = trackLimit(p);

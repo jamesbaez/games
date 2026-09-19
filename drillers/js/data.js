@@ -163,11 +163,11 @@ export const CARDS = [
   // Old corp tech — advanced (needs a battery)
   c('ultrahot_furnace', 'Ultrahot Furnace', 'adv', { cost: 3, bat: true, fuel: 3, play: 'solid', fx: { fuel: 6, upFuel: 1 }, text: 'Upgrade your maximum fuel once for free.' }),
   c('transformer_drill', 'Transformer Drill', 'adv', { cost: 2, bat: true, fuel: 4, play: 1, choose: [{ label: '2⛏', fx: { drills: 2 } }, { label: '1⛏ 2↕️', fx: { drills: 1, moves: 2 } }, { label: '4↕️', fx: { moves: 4 } }] }),
-  c('reckless_descent', 'Reckless Descent', 'adv', { cost: 0, bat: true, fuel: 4, play: 0, fx: { moves: 4, damage: 1 } }),
+  c('reckless_descent', 'Reckless Descent', 'adv', { cost: 0, bat: true, fuel: 4, play: 0, fx: { moves: 5, damage: 1 } }),
   c('super_heavy_drill', 'Super Heavy Drill', 'adv', { cost: 17, bat: true, fuel: 5, play: 4, fx: { drills: 5 } }),
   c('mining_drone_pro', 'Mining Drone Pro', 'adv', { cost: 6, bat: true, fuel: 4, play: 3, fx: { drills: 3, drone: 1 } }),
   c('recoil_capacitor', 'Recoil Capacitor', 'adv', { cost: 8, bat: true, perm: true, ability: { limit: '1x', req: { drillsGained: 3 }, gain: { fuel: 2 } }, text: 'Permanent. 1x: if you have gained 3 drills this turn, gain 2 fuel.' }),
-  c('supercharged_drilling', 'Supercharged Drilling', 'adv', { cost: 12, bat: true, fuel: 5, play: 6, fx: { drills: 6, damageHand: 1 }, text: 'Take a DAMAGE into your hand.' }),
+  c('supercharged_drilling', 'Supercharged Drilling', 'adv', { cost: 12, bat: true, fuel: 5, play: 6, fx: { drills: 5, damageHand: 1 }, text: 'Take a DAMAGE into your hand.' }),
   c('rocket_engine_pro', 'Rocket Engine Pro', 'adv', { cost: 9, bat: true, fuel: 4, play: 2, fx: { moves: 5, repair: 1 } }),
   c('surgeon', 'Surgeon', 'adv', { cost: 8, bat: true, perm: true, ability: { limit: '1x', cost: { fuel: 1 }, gain: { drills: 1 } }, text: 'Permanent. 1x: pay 1 fuel to gain 1 drill.' }),
   c('deep_neural_network', 'Deep Neural Network', 'adv', { cost: 9, bat: true, perm: true, ability: { limit: '1x', cost: { fuel: 2 }, gain: { draw: 1 } }, text: 'Permanent. 1x: pay 2 fuel to draw a card.' }),

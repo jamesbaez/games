@@ -231,6 +231,16 @@ test('advanced cards need a battery tile', () => {
   assert.equal(s.players[0].tiles[0].ex, true);
 });
 
+test('buying an advanced card spends the battery that loses the fewest points', () => {
+  let s = newGame();
+  s.phase = 'surface';
+  s.players[0].credits = 50;
+  // k5 (floor 3 corridor) loses 2, k18 (floor 5 corridor) loses 1
+  s.players[0].tiles.push({ id: 'k5', ex: false }, { id: 'k18', ex: false });
+  s = apply(s, { p: 0, type: 'buy', shop: 'adv', iid: s.shops.adv.row[0] });
+  assert.deepEqual(s.players[0].tiles.map((t) => t.ex), [false, true]);
+});
+
 test('floor cards: Jackpot emeralds and Cave With No Ceiling', () => {
   let s = newGame();
   const p = s.players[0];

@@ -322,7 +322,9 @@ function endOpsFloor(s, p, o = {}) {
 }
 
 function payBattery(s, p) {
-  const t = p.tiles.find((x) => !x.ex && tileDef(x.id).ex === 'battery');
+  // Exhausting only costs points, so always spend the battery that loses the fewest.
+  const t = p.tiles.filter((x) => !x.ex && tileDef(x.id).ex === 'battery')
+    .reduce((a, x) => (a && tileDef(a.id).loss <= tileDef(x.id).loss ? a : x), null);
   if (!t) fail('Advanced cards need a battery: an unexhausted mine tile with a battery.');
   t.ex = true;
 }

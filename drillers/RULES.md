@@ -71,7 +71,7 @@ This summarizes the official rulebook (`ref/rulebook/`) plus the component photo
 - **Card-granted repairs** (Laser Cutter, Pit Stop, Repair Bots, …) add to `turn.repairs`. They can be spent in Operations or Surfacing on any owned card in hand, play area, discard pile, or on top of the deck. Unused repairs expire at end of turn. A repaired DAMAGE card returns to the pile; any other repaired card leaves the game. Repairing a card from your hand draws a replacement. The paid 5-credit repair is separate and limited to once per surfacing.
 
 **Buying**
-- **Batteries:** buying an advanced card automatically exhausts your first unexhausted battery tile.
+- **Batteries:** buying an advanced card automatically exhausts your unexhausted battery tile with the smallest point loss (the first one on the track if tied). Exhausting a battery tile has no other effect, so this is never worse than choosing.
 - **Drone buys** happen during Operations and can't use the shop refresh tile.
 
 **Card choices made automatically or by default**

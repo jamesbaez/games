@@ -44,6 +44,9 @@ test('revealsInfo: plain moves are undoable, draws/excavation/turn end are not',
   const e1 = apply(s, { p: 0, type: 'endOps' });
   assert.equal(revealsInfo(s, e1), false);
   const e2 = apply(e1, { p: 0, type: 'endSurface' });
+  const low = structuredClone(e1);
+  low.players[0].fuel = 2;
+  assert.equal(apply(low, { p: 0, type: 'endSurface' }).players[0].fuel, low.players[0].fuelMax, 'finishing surfacing refuels');
   assert.equal(revealsInfo(e2, apply(e2, { p: 0, type: 'endTurn', keep: [] })), true);
 });
 

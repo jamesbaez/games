@@ -42,7 +42,7 @@ This summarizes the official rulebook (`ref/rulebook/`) plus the component photo
    - One paid repair per surfacing (5 credits).
    - Discard hand cards for 2 credits each.
    - Upgrade storage (3 credits) or fuel (next cost in 2,2,3,3,3,4,4,4; the cap starts over spaces 11–12, max 10 → 18).
-   - Refuel to max.
+   - Refuel to max. The engine does this automatically when you finish surfacing, after any tank upgrade.
    - Buy cards: bought cards go on top of your deck; permanent cards go beside the dashboard.
    - Shop refresh tile, once per game.
 3. **Upkeep.**

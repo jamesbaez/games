@@ -634,7 +634,7 @@ function step(s, a) {
       log(s, `${p.name} refreshes a shop.`);
       break;
     }
-    case 'endSurface': s.phase = 'upkeep'; break;
+    case 'endSurface': p.fuel = p.fuelMax; s.phase = 'upkeep'; break; // refuelling is free and never hurts
     case 'endTurn': {
       const keep = (a.keep || []).filter((x) => p.hand.includes(x));
       const cost = Math.max(0, keep.length - p.turn.keepFree);

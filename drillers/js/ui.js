@@ -649,11 +649,11 @@ function renderGame() {
         <h2>${esc(me.name)} (you) ${pic('dashboard')}</h2>
         ${dashHtml(s, me, true)}
         ${myTurn ? actionsHtml(s, me) : ''}
+        ${me.perms.length ? `<h3>Permanent cards</h3><div class="cards">${me.perms.map((iid) => cardHtml(s, iid, myTurn ? abilityBtns(s, me, iid) : '')).join('')}</div>` : ''}
         <h3>Hand</h3>
         <div class="cards">${handHtml(s, me, myTurn)}</div>
         ${top ? `<h3>Top of your deck</h3><div class="cards">${cardHtml(s, top, myTurn ? repairBtn(s, me, top) : '')}</div>` : ''}
         ${me.play.length ? `<h3>Play area</h3><div class="cards">${playAreaHtml(s, me, myTurn)}</div>` : ''}
-        ${me.perms.length ? `<h3>Permanent cards</h3><div class="cards">${me.perms.map((iid) => cardHtml(s, iid, myTurn ? abilityBtns(s, me, iid) : '')).join('')}</div>` : ''}
         ${me.discard.length ? `<details ${keepOpen('discard')}><summary>Discard pile (${me.discard.length})${canRepair ? ' · repair from here' : ''}</summary><div class="cards">${me.discard.map((iid) => cardHtml(s, iid, canRepair ? repairBtn(s, me, iid) : '')).join('')}</div></details>` : ''}
         <h2>Shops</h2>
         ${shopsHtml(s, me, myTurn)}

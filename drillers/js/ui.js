@@ -415,6 +415,7 @@ function statsHtml(p) {
       <span>🤖 ${p.drones.map((d) => (d ? '●' : '○')).join('')}</span>
       <span>${floorLabel(p.floor)}</span>
       ${p.turn.repairs ? `<span class="good">🔧 ${p.turn.repairs} free repair${p.turn.repairs > 1 ? 's' : ''}</span>` : ''}
+      ${p.turn.draws ? `<span class="good">🃏 ${p.turn.draws} card${p.turn.draws > 1 ? 's' : ''} to draw</span>` : ''}
     </div>
     <div>Storage (${p.storage.length}/${p.storageMax}): ${p.storage.map(gem).join('') || '<span class="muted">empty</span>'}</div>`;
 }
@@ -488,6 +489,7 @@ function actionsHtml(s, p) {
   const fl = s.floors[p.floor];
   out.push(`<button class="secondary" ${session.undo.length ? '' : 'disabled'} data-lobby="undo">↶ Undo</button>`);
   if (p.turn.repairs > 0 && s.phase !== 'upkeep') out.push(`<span class="muted">🔧 Repair with the button on a card in your hand, play area or top of deck, or under "Discard pile".</span>`);
+  if (p.turn.draws) out.push(btn(`Draw ${p.turn.draws}`, { type: 'draw' }, { cls: 'primary' }), `<span class="muted">You can repair before drawing. Any other action draws first.</span>`);
   if (s.phase === 'ops') {
     const suction = p.turn.passives.includes('suction');
     const collectCost = m => suction && m === 'silver' ? 'free' : '1⛏';

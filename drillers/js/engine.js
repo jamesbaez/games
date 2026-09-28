@@ -37,7 +37,7 @@ function shuffle(s, arr) {
 
 const freshTurn = () => ({
   mainPlayed: [], abil: {}, passives: [], movesGained: 0, drillsGained: 0, fuelPlays: 0,
-  dmgFuel: false, repairs: 0, repaired: false, keepFree: 1, floorUsed: {},
+  dmgFuel: false, repairs: 0, repaired: false, draws: 0, keepFree: 1, floorUsed: {},
 });
 
 function log(s, msg) {
@@ -205,7 +205,9 @@ function applyFx(s, p, fx = {}, iid) {
   if (fx.fuel) gainFuel(p, fx.fuel);
   if (fx.credits) p.credits += fx.credits;
   for (let i = 0; i < (fx.drone || 0); i++) refreshDrone(p);
-  if (fx.draw) draw(s, p, fx.draw);
+  // A card that also repairs holds its draw (see step), so the repair can come first, e.g. on the top card.
+  if (fx.draw && fx.repair) p.turn.draws = (p.turn.draws || 0) + fx.draw;
+  else if (fx.draw) draw(s, p, fx.draw);
   for (let i = 0; i < (fx.damage || 0); i++) giveDamage(s, p, 'discard');
   for (let i = 0; i < (fx.damageTop || 0); i++) giveDamage(s, p, 'top');
   for (let i = 0; i < (fx.damageHand || 0); i++) giveDamage(s, p, 'hand');
@@ -390,8 +392,14 @@ function step(s, a) {
   if (OPS.has(a.type) && s.phase !== 'ops') fail('Only during Operations.');
   if (SURFACE.has(a.type) && s.phase !== 'surface') fail('Only while surfacing.');
   if (a.type === 'endTurn' && s.phase !== 'upkeep') fail('Finish your Operations first.');
+  if (p.turn.draws && a.type !== 'repair') {
+    draw(s, p, p.turn.draws);
+    p.turn.draws = 0;
+    if (a.type === 'draw') return;
+  }
 
   switch (a.type) {
+    case 'draw': fail('Nothing to draw.');
     case 'playMain': {
       if (!p.hand.includes(a.iid)) fail('Card not in hand.');
       const c = cardDef(s, a.iid);

@@ -69,6 +69,7 @@ This summarizes the official rulebook (`ref/rulebook/`) plus the component photo
 **Damage and repair**
 - **Taking damage** puts a DAMAGE card in your discard pile (or on top of your deck, or into your hand, as the card says). With the pile empty, you lose the top mineral of your most valuable non-empty market column instead (rulebook FAQ).
 - **Card-granted repairs** (Laser Cutter, Pit Stop, Repair Bots, …) add to `turn.repairs`. They can be spent in Operations or Surfacing on any owned card in hand, play area, discard pile, or on top of the deck. Unused repairs expire at end of turn. A repaired DAMAGE card returns to the pile; any other repaired card leaves the game. Repairing a card from your hand draws a replacement. The paid 5-credit repair is separate and limited to once per surfacing.
+- **Draw and repair on one card** (Water Cooling): effects resolve in any order, so the draw waits. You can repair first (for example the card on top of your deck), then tap Draw. Any action other than a repair draws first.
 
 **Buying**
 - **Batteries:** buying an advanced card automatically exhausts your unexhausted battery tile with the smallest point loss (the first one on the track if tied). Exhausting a battery tile has no other effect, so this is never worse than choosing.

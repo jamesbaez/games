@@ -114,6 +114,30 @@ test('card repairs are free and remove damage from the game', () => {
   assert.equal(s.players[0].credits, 2);
 });
 
+test('a card that draws and repairs lets you repair the top card before drawing', () => {
+  let s = newGame();
+  const wc = giveCard(s, 'water_cooling');
+  const dmg = 'c' + s.nextId++;
+  s.cards[dmg] = 'damage';
+  s.players[0].deck.unshift(dmg);
+  const next = s.players[0].deck[1];
+  const played = apply(s, { p: 0, type: 'playMain', iid: wc });
+  assert.equal(played.players[0].hand.length, s.players[0].hand.length - 1);
+  assert.equal(played.players[0].turn.draws, 1);
+  assert.equal(revealsInfo(s, played), false);
+
+  s = apply(played, { p: 0, type: 'repair', iid: dmg });
+  s = apply(s, { p: 0, type: 'draw' });
+  assert.equal(s.players[0].hand.at(-1), next);
+  assert.equal(s.players[0].turn.draws, 0);
+  expectError(() => apply(s, { p: 0, type: 'draw' }));
+
+  // Any other action draws first.
+  const moved = apply({ ...played, players: [{ ...played.players[0], moves: 1 }, played.players[1]] }, { p: 0, type: 'move', dir: 1 });
+  assert.equal(moved.players[0].hand.at(-1), dmg);
+  assert.equal(moved.players[0].turn.draws, 0);
+});
+
 test('excavating a corridor adds minerals and a tile', () => {
   let s = newGame();
   s.players[0].floor = 2;

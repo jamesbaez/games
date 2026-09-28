@@ -22,7 +22,8 @@ app.addEventListener('toggle', (e) => {
 }, true);
 
 // session: { mode: 'local'|'online'|'moved', state, status, undo, url }
-// undo: earlier states of this device's current turn, cleared when hidden info is revealed.
+// undo: earlier states of this device's current turn, cleared when hidden info is revealed
+//   (also kept in localStorage, see storeUndo).
 // Online sessions also have: code, seat, host, net, beat (presence timer),
 //   seq: the latest write this device knows of (-1 while loading or reloading),
 //   confirmed: the latest state known to be saved, saving: promise chain of writes, gen: bumped to drop queued writes.
@@ -91,7 +92,7 @@ async function lobbyTask(fn) {
 }
 
 function startLocal(state) {
-  session = { mode: 'local', state, status: 'Pass & play', undo: [] };
+  session = { mode: 'local', state, status: 'Pass & play', undo: restoreUndo('local', state) };
   passCurtain = state.over ? null : state.current; // start behind the curtain so the first player isn't spoiled
   LS.set('drillers.local', state);
   render();
@@ -172,12 +173,13 @@ function receive(me, room) {
   if (room.seq <= me.seq) return; // our own save coming back, or older news
   if (me.seq >= 0) message = ''; // keep the "did not save" message after a reload
   if (me.state?.current !== room.state?.current) keep = null;
-  Object.assign(me, { seq: room.seq, host: room.host, state: room.state, confirmed: room.state, undo: [] });
+  Object.assign(me, { seq: room.seq, host: room.host, state: room.state, confirmed: room.state, undo: restoreUndo(undoGame(me), room.state) });
   render();
 }
 
 // Online moves show at once and save in order. If a save fails (offline, or another device saved first),
-// the saves queued behind it are dropped and the game reloads from the database.
+// the saves queued behind it are dropped and the game reloads from the database (the undo stack
+// comes back with it, see restoreUndo).
 function save(me, prev, next) {
   const room = { seq: ++me.seq, host: me.host, state: next };
   const gen = me.gen;
@@ -270,6 +272,20 @@ if (startHash.startsWith('#move=')) {
 if (startHash.startsWith('#room=') && onlineReady) lobbyTask(() => openOnline(startHash.slice(6).toUpperCase()));
 
 // ---------- state changes ----------
+// The undo stack is also saved on this device after every change, so a reload or a failed save
+// doesn't lose it. It comes back only if the game loads at one of its states, so a move from
+// another device still clears it.
+const undoGame = (se) => (se.mode === 'online' ? `${se.code}/${se.seat}` : se.mode);
+function storeUndo() {
+  LS.set('drillers.undo', { game: undoGame(session), states: [...session.undo, session.state] });
+}
+function restoreUndo(game, state) {
+  const saved = LS.get('drillers.undo');
+  const json = JSON.stringify(state);
+  const i = saved?.game === game ? saved.states.findIndex((x) => JSON.stringify(x) === json) : -1;
+  return i < 0 ? [] : saved.states.slice(0, i);
+}
+
 function commit(next) {
   const prev = session.state;
   session.undo = revealsInfo(prev, next) ? [] : [...session.undo, prev];
@@ -287,6 +303,7 @@ function show(next) {
   const prev = session.state;
   session.state = next;
   message = '';
+  storeUndo();
   if (session.mode === 'online') save(session, prev, next);
   if (session.mode === 'local') {
     LS.set('drillers.local', next);

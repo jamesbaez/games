@@ -662,7 +662,7 @@ function renderGame() {
         <h2>Mine ${pic('board')}</h2>
         ${mineHtml(s, me)}
         <h2>Log</h2>
-        <div class="log">${s.log.slice(-12).reverse().map((l) => `<div>${esc(l)}</div>`).join('')}</div>
+        <div class="log">${s.log.slice().reverse().map((l) => `<div>${esc(l)}</div>`).join('')}</div>
       </section>
       <section class="col">
         <h2>${esc(me.name)} (you) ${pic('dashboard')}</h2>

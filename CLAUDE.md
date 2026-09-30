@@ -11,7 +11,7 @@ A personal repo of browser versions of board games, so the owner and a friend ca
 
 | Game | Folder | Status |
 |---|---|---|
-| Drillers (Czech Games Edition, 2026) | `drillers/` | Playable. Unofficial fan implementation. Online 2-player via game code (live or slow, moves saved in Firebase), plus pass & play. The engine supports 1–4 players; there is no solo bot. |
+| Drillers (Czech Games Edition, 2026) | `drillers/` | Playable. Unofficial fan implementation. Online 2-player via game code (live or slow, moves saved in Firebase, with chat), plus pass & play. The engine supports 1–4 players; there is no solo bot. |
 
 "It doesn't have to be pretty." The UI is deliberately utilitarian and phone-first.
 
@@ -44,7 +44,7 @@ npm run fuzz             # ui-fuzz, then online-fuzz
                          # ui-fuzz: clicks random buttons in ui.js through 4 local games (abandons any past 2500 turns)
                          #   args: node test/ui-fuzz.mjs <games> <seed> <maxTurns>; the same seed replays the same run
                          #   fails on runtime errors, a screen with no enabled buttons, or no game reaching game over
-                         # online-fuzz: 3 devices (2 of them the same player) click for 8 s against a fake database
+                         # online-fuzz: 3 devices (2 of them the same player) click and chat for 8 s against a fake database
                          #   that fails writes and drops connections; fails if devices end up disagreeing
                          #   args: node test/online-fuzz.mjs <seconds> <dbUrl>; a real dbUrl also checks its rules
 
@@ -71,12 +71,14 @@ Run both `npm test` and `npm run fuzz` after changing engine, data or UI code.
 - `rooms/<CODE>` (8 letters) = `{ seq, host, state }`. `state` is the engine state as a JSON string (the database drops empty arrays and nulls), missing until the second player joins.
 - There is no host: every device applies actions with the engine and writes the whole room. `firebase.rules.json` only accepts `seq + 1`, so a device that missed a move gets its write refused (401), drops its queued writes, and reloads. **When the rules change, the owner must paste them into the Firebase console.**
 - Writes are POSTs with `?x-http-method-override=PUT` so browsers skip the CORS preflight. Reads stream through `EventSource`, reopened on `visibilitychange`.
+- **Chat:** `chat/<CODE>/<id>` = `{ seat, text }`. Messages are added with a plain POST (the REST API's push, so the database picks ids that sort by time) and never touch `rooms/`, so they can't clash with moves. `watchRoom` streams the chat alongside the room. Sending a message alerts the other seats through their ntfy topics, with the same presence check as turn alerts.
 - A seat isn't tied to a device: any device with the code can pick a player. The full state goes to every device (trusted friends); the UI shows only your own hand and top card.
 - **Turn alerts:** after a save that passes the turn, the device posts to the ntfy.sh topic `drillers-<code>-p<seat+1>`, unless that seat is present: `seen/<CODE>/<seat>` is under 45 s old. A device writes it every 30 s while the page is visible and focused, and deletes it (a `keepalive` write) on `visibilitychange`, `blur` or leaving the game. With one seat open on two devices, hiding either one counts as away.
-- localStorage: `drillers.online` (`{code, seat}` of the last online game), `drillers.local` (pass & play), `drillers.name`, `drillers.undo` (the undo stack, see UI below).
+- localStorage: `drillers.online` (`{code, seat}` of the last online game), `drillers.local` (pass & play), `drillers.name`, `drillers.undo` (the undo stack, see UI below), `drillers.chatRead` (`{code, id}` of the newest chat message read on this device).
 
 **UI (`js/ui.js`)**
-- Every change re-renders all of `#app` via `innerHTML`.
+- Every change re-renders `#app` via `innerHTML`, except that the game screen is a frame built once: its parts (`#g-top`, `#g-mine`, `#g-chat`, `#g-side`) are re-rendered, but the chat box between them isn't, so a move arriving mid-message doesn't wipe the text or close the phone keyboard. `#g-top` is `display: contents` so the sticky HUD still sticks for the whole page. The fuzz tests' fake `#app` stitches the parts back into one string.
+- Unread chat messages from other seats show as a 💬 notice in the HUD. They count as read when you tap the notice or the chat box, or send a message.
 - Buttons carry `data-act` JSON actions, handled by one delegated click listener. Lobby and navigation buttons use `data-lobby`.
 - Pass & play shows a "pass the phone" curtain between turns.
 - **Undo:** each device keeps a stack of earlier states of its own turn in `session.undo`. Each committed action is pushed unless `revealsInfo(prev, next)` in the engine says it exposed hidden information or passed the turn, in which case the stack is cleared. Online, an undo is just another save, and a move arriving from another device clears the stack. After every change the stack and the current state are also saved to localStorage (`drillers.undo`). When a game loads (a page reload, resuming, or the reload after a failed save), `restoreUndo` finds the loaded state in that list and brings back the states before it. If the loaded state isn't in the list, for example after another device's move, the stack starts empty.

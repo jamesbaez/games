@@ -1,6 +1,6 @@
 import { setup, apply, cardDef, tileDef, floorCardDef, activeFloorCard, nextMineral, trackUsed, trackLimit, score, revealsInfo, GameError } from './engine.js';
 import * as D from './data.js';
-import { onlineReady, createRoom, getRoom, writeRoom, watchRoom, markSeen, notify, alertTopic, packSave, unpackSave } from './net.js';
+import { onlineReady, createRoom, getRoom, writeRoom, watchRoom, postChat, markSeen, notify, alertTopic, packSave, unpackSave } from './net.js';
 
 const app = document.getElementById('app');
 const LS = {
@@ -26,7 +26,8 @@ app.addEventListener('toggle', (e) => {
 //   (also kept in localStorage, see storeUndo).
 // Online sessions also have: code, seat, host, net, beat (presence timer),
 //   seq: the latest write this device knows of (-1 while loading or reloading),
-//   confirmed: the latest state known to be saved, saving: promise chain of writes, gen: bumped to drop queued writes.
+//   confirmed: the latest state known to be saved, saving: promise chain of writes, gen: bumped to drop queued writes,
+//   chat: the game's chat messages, oldest first, chatRead: id of the newest message read on this device.
 let session = null;
 let message = '';
 let keep = null; // upkeep cards ticked to keep; null until the player touches a box (see kept())
@@ -142,10 +143,18 @@ async function joinAsSecond() {
 function startOnline(code, seat) {
   seatPick = null;
   LS.set('drillers.online', { code, seat });
-  const me = { mode: 'online', code, seat, host: '', state: null, confirmed: null, seq: -1, undo: [], status: 'Connecting…', saving: Promise.resolve(), gen: 0 };
+  const read = LS.get('drillers.chatRead');
+  const me = { mode: 'online', code, seat, host: '', state: null, confirmed: null, seq: -1, undo: [], status: 'Connecting…', saving: Promise.resolve(), gen: 0,
+    chat: [], chatRead: read?.code === code ? read.id : '' };
   session = me;
   me.net = watchRoom(code, {
     onRoom: (room) => { if (session === me) receive(me, room); },
+    onChat: (msgs) => {
+      if (session !== me) return;
+      me.chat = msgs;
+      if (document.activeElement?.id === 'chat-text') readChat();
+      render();
+    },
     onStatus: (st) => { if (session === me) { me.status = st; render(); } },
   });
   me.beat = setInterval(() => { if (present()) markSeen(code, seat, true); }, 30000);
@@ -209,6 +218,37 @@ function alertOthers(me, prev, next) {
   } else if (!next.over && next.current !== prev.current && next.current !== me.seat) {
     notify(me.code, next.current, `Your turn against ${next.players[me.seat].name}.`, link);
   }
+}
+
+// ---------- chat (online only) ----------
+// Messages count as read once you tap the chat notice or the chat box, or send one.
+function readChat() {
+  const last = session.chat.at(-1)?.id;
+  if (!last || last <= session.chatRead) return;
+  session.chatRead = last;
+  LS.set('drillers.chatRead', { code: session.code, id: last });
+}
+
+async function sendChat(me, input) {
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  readChat();
+  try {
+    await postChat(me.code, me.seat, text);
+  } catch {
+    if (!input.value) input.value = text;
+    message = 'Your message did not send. Check your connection and try again.';
+    if (session === me) render();
+    return;
+  }
+  const link = gameLink(`room=${me.code}`);
+  me.state.players.forEach((p, i) => { if (i !== me.seat) notify(me.code, i, `${me.state.players[me.seat].name}: ${text}`, link, 'speech_balloon'); });
+}
+
+function chatHtml(s, seat) {
+  const msgs = session.chat.slice(-100).reverse(); // newest first, like the log
+  return `<div class="chat-log">${msgs.length ? msgs.map((m) => `<div class="${m.seat === seat ? 'me' : ''}"><b>${esc(s.players[m.seat]?.name ?? '?')}</b> ${esc(m.text)}</div>`).join('') : '<div>No messages yet.</div>'}</div>`;
 }
 
 function leave() {
@@ -642,8 +682,24 @@ function renderGame() {
   const top = me.deck[0];
   const phaseName = { ops: 'Operations', surface: 'Surfacing', upkeep: 'Upkeep' }[s.phase];
   const canRepair = myTurn && s.phase !== 'upkeep' && (me.turn.repairs > 0 || (s.phase === 'surface' && !me.turn.repaired));
+  const online = session.mode === 'online';
+  const unread = online ? session.chat.filter((m) => m.id > session.chatRead && m.seat !== seat) : [];
+  const news = unread.at(-1);
 
-  app.innerHTML = `
+  // The screen is a frame whose parts are re-rendered, all except the chat box: replacing that would
+  // wipe what you're typing and close the phone keyboard whenever a move arrives.
+  if (!document.getElementById('g-top')) {
+    app.innerHTML = `<div id="g-top"></div>
+      <div class="layout">
+        <section class="col"><div id="g-mine"></div>${online ? `
+          <h2>Chat</h2>
+          <form id="chat" class="chat"><input id="chat-text" maxlength="500" autocomplete="off" enterkeyhint="send" placeholder="Message"><button>Send</button></form>
+          <div id="g-chat"></div>` : ''}</section>
+        <section class="col" id="g-side"></section>
+      </div>`;
+  }
+  const parts = {};
+  parts.top = `
     <header class="top">
       <div><b>Drillers</b> ${session.code ? `<span class="muted">game ${esc(session.code)}</span>` : ''}</div>
       <div class="status">${esc(session.status || '')}</div>
@@ -654,17 +710,17 @@ function renderGame() {
     ${s.endBy !== null && !s.over ? '<div class="alert">The mine is collapsing — final turns!</div>' : ''}
     <div class="hud ${myTurn ? 'mine' : ''}">
       ${s.over ? '' : `<div class="turn">Turn ${s.turnNo}: <b>${esc(cur.name)}</b> — ${phaseName}${myTurn ? ' (you)' : ''}</div>`}
+      ${news ? `<button class="small secondary chat-news" data-lobby="chat">💬 ${unread.length > 1 ? `(${unread.length}) ` : ''}<b>${esc(s.players[news.seat]?.name ?? '?')}</b>: ${esc(news.text)}</button>` : ''}
       ${statsHtml(me)}
       ${message ? `<div class="alert">${esc(message)}</div>` : ''}
-    </div>
-    <div class="layout">
-      <section class="col">
+    </div>`;
+  parts.mine = `
         <h2>Mine ${pic('board')}</h2>
         ${mineHtml(s, me)}
         <h2>Log</h2>
-        <div class="log">${s.log.slice().reverse().map((l) => `<div>${esc(l)}</div>`).join('')}</div>
-      </section>
-      <section class="col">
+        <div class="log">${s.log.slice().reverse().map((l) => `<div>${esc(l)}</div>`).join('')}</div>`;
+  if (online) parts.chat = chatHtml(s, seat);
+  parts.side = `
         <h2>${esc(me.name)} (you) ${pic('dashboard')}</h2>
         ${dashHtml(s, me, true)}
         ${myTurn ? actionsHtml(s, me) : ''}
@@ -677,9 +733,8 @@ function renderGame() {
         <h2>Shops</h2>
         ${shopsHtml(s, me, myTurn)}
         ${others.map((o) => `<h2>${esc(o.name)}</h2>${dashHtml(s, o, false)}`).join('')}
-        ${!s.over ? `<details ${keepOpen('score')}><summary>Current score estimate</summary>${scoresHtml(s)}</details>` : ''}
-      </section>
-    </div>`;
+        ${!s.over ? `<details ${keepOpen('score')}><summary>Current score estimate</summary>${scoresHtml(s)}</details>` : ''}`;
+  for (const [k, html] of Object.entries(parts)) document.getElementById(`g-${k}`).innerHTML = html;
 }
 
 function render() {
@@ -730,6 +785,20 @@ app.addEventListener('click', (e) => {
   }
   if (what === 'rejectMove') { pendingMove = null; render(); }
   if (what === 'leave') leave();
+  if (what === 'chat') {
+    readChat();
+    render();
+    document.getElementById('chat')?.scrollIntoView({ block: 'center' });
+  }
+});
+app.addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (session?.mode !== 'online') return;
+  sendChat(session, document.getElementById('chat-text'));
+  render();
+});
+app.addEventListener('focusin', (e) => {
+  if (e.target.id === 'chat-text' && session?.mode === 'online') { readChat(); render(); }
 });
 app.addEventListener('change', (e) => {
   const k = e.target.dataset?.keep;

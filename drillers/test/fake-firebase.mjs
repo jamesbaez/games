@@ -1,6 +1,6 @@
 // In-memory stand-in for the Firebase Realtime Database REST API, covering what js/net.js uses:
-// GET (plain or as an event stream), PUT sent as POST ?x-http-method-override=PUT, print=silent,
-// {".sv":"timestamp"}, and the rules in firebase.rules.json (hand-coded below).
+// GET (plain or as an event stream), PUT sent as POST ?x-http-method-override=PUT, a plain POST (push),
+// print=silent, {".sv":"timestamp"}, and the rules in firebase.rules.json (hand-coded below).
 // Set chaos.failWrite / chaos.dropStream (probabilities) to exercise failed saves and dropped connections.
 import http from 'node:http';
 
@@ -18,12 +18,17 @@ function allowed(path, old, value) {
   return !!seen && CODE.test(seen[1]) && (value === null || typeof value === 'number');
 }
 
+// A push to chat/<CODE>.
+const allowedChat = (path, msg) => CODE.test(path.match(/^chat\/([^/]+)$/)?.[1] || '')
+  && typeof msg?.seat === 'number' && typeof msg.text === 'string' && msg.text.length > 0 && msg.text.length <= 500;
+
 export function fakeFirebase({ random = Math.random } = {}) {
   const chaos = { failWrite: 0, dropStream: 0 };
-  const data = new Map(); // path -> value; only room and seen paths are ever stored
+  const data = new Map(); // path -> value; only room, seen and chat/<CODE> paths are ever stored
   const streams = new Map(); // path -> Set of open event-stream responses
-  const readable = (path) => /^rooms\/[^/]+$|^seen\/[^/]+\/[^/]+$/.test(path);
-  const event = (res, value) => res.write(`event: put\ndata: ${JSON.stringify({ path: '/', data: value })}\n\n`);
+  let pushes = 0;
+  const readable = (path) => /^rooms\/[^/]+$|^seen\/[^/]+\/[^/]+$|^chat\/[^/]+$/.test(path);
+  const event = (res, value, at = '/') => res.write(`event: put\ndata: ${JSON.stringify({ path: at, data: value })}\n\n`);
   const json = (res, status, value) => res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(value));
 
   const server = http.createServer(async (req, res) => {
@@ -42,10 +47,21 @@ export function fakeFirebase({ random = Math.random } = {}) {
       req.on('close', () => streams.get(path).delete(res));
       return;
     }
-    if (method !== 'PUT') return json(res, 405, { error: 'method not supported by the fake' });
+    if (method !== 'PUT' && method !== 'POST') return json(res, 405, { error: 'method not supported by the fake' });
     let body = '';
     for await (const chunk of req) body += chunk;
     if (random() < chaos.failWrite) return json(res, 503, { error: 'chaos' });
+    if (method === 'POST') {
+      const msg = JSON.parse(body);
+      if (!allowedChat(path, msg)) return json(res, 401, { error: 'Permission denied' });
+      const id = `-fake${String(++pushes).padStart(8, '0')}`; // sorts by time, like a real push id
+      data.set(path, { ...data.get(path), [id]: msg });
+      for (const s of streams.get(path) || []) {
+        if (random() < chaos.dropStream) s.end(); else event(s, msg, `/${id}`);
+      }
+      if (url.searchParams.get('print') === 'silent') res.writeHead(204).end(); else json(res, 200, { name: id });
+      return;
+    }
     let value = JSON.parse(body);
     if (value?.['.sv'] === 'timestamp') value = Date.now();
     if (!allowed(path, data.get(path), value)) return json(res, 401, { error: 'Permission denied' });

@@ -2,11 +2,11 @@
 // play one online game through test/fake-firebase.mjs by clicking random buttons:
 //   Ann creates the game, Bob joins it, and Ann's "laptop" joins as Ann too, so both of Ann's
 //   devices click during her turns and fight over saves. The fake database also fails some writes
-//   and drops live connections. Bob's page counts as hidden, so turn alerts go to him only.
-//   At the end every page is hidden, which must clear its presence.
+//   and drops live connections. Every device also sends the odd chat message. Bob's page counts as
+//   hidden, so turn and chat alerts go to him only. At the end every page is hidden, which must clear its presence.
 // Fails on runtime errors, alerts, too little progress, alerts sent to the wrong seat, devices
-// that disagree about the game once the clicking stops, presence left behind by hidden pages,
-// or database rules that allow a stale save.
+// that disagree about the game or the chat once the clicking stops, presence left behind by hidden pages,
+// or database rules that allow a stale save or a bad chat message.
 // Usage: node test/online-fuzz.mjs [seconds=8] [dbUrl]  (a dbUrl runs against a real database, without chaos)
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 
@@ -26,16 +26,19 @@ if (isMainThread) {
   const code = await new Promise((resolve) => ann.once('message', (m) => resolve(m.code)));
   const bob = spawn('join', 'Bob', true);
   bob.postMessage({ code });
-  await sleep(300);
+  await new Promise((resolve) => bob.once('message', resolve)); // joined, so the laptop can pick a seat
   const laptop = spawn('seat0', 'Ann');
   laptop.postMessage({ code });
   await sleep(1000);
   if (fake) Object.assign(fake.chaos, { failWrite: 0.02, dropStream: 0.01 }); // once everyone has joined
   const workers = { ann, bob, laptop };
+  let settling = 0;
   const reports = Object.fromEntries(await Promise.all(Object.entries(workers).map(([k, w]) =>
     new Promise((resolve, reject) => {
       w.on('message', (m) => {
         if (m.settling && fake) Object.assign(fake.chaos, { failWrite: 0, dropStream: 0 }); // let the final writes through
+        // Compare views only once every device has stopped clicking.
+        if (m.settling && ++settling === 3) for (const other of Object.values(workers)) other.postMessage({ settle: true });
         if (m.report) resolve([k, m.report]);
       });
       w.on('error', reject);
@@ -53,6 +56,11 @@ if (isMainThread) {
   if (stale.status !== 401) problems.push(`a stale save got status ${stale.status}, expected 401`);
   const list = await fetch(`${db}/rooms.json`);
   if (list.status !== 401) problems.push(`listing all games got status ${list.status}, expected 401`);
+  const chats = await fetch(`${db}/chat.json`);
+  if (chats.status !== 401) problems.push(`listing all chats got status ${chats.status}, expected 401`);
+  const badChat = await fetch(`${db}/chat/${code}.json`, { method: 'POST', body: JSON.stringify({ seat: 0, text: '' }) });
+  if (badChat.status !== 401) problems.push(`an empty chat message got status ${badChat.status}, expected 401`);
+  const chat = Object.values(await (await fetch(`${db}/chat/${code}.json`)).json() || {});
   for (const [k, r] of Object.entries(reports)) {
     if (r.errors.length) problems.push(`${k}: errors ${r.errors.slice(0, 3).join(' | ')}`);
     if (r.alerts.length) problems.push(`${k}: alert() ${r.alerts.join(' | ')}`);
@@ -60,17 +68,20 @@ if (isMainThread) {
   }
   const views = Object.values(reports).map((r) => r.view);
   if (new Set(views).size !== 1) problems.push('devices disagree:\n' + Object.entries(reports).map(([k, r]) => `--- ${k}\n${r.view}`).join('\n'));
-  const lastLog = state.log.at(-1).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const esc = (x) => x.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const lastLog = esc(state.log.at(-1));
   if (!views[0]?.includes(lastLog)) problems.push(`devices don't show the saved game's last log line: ${state.log.at(-1)}`);
+  if (!chat.length) problems.push('no chat messages were saved');
+  else if (!views[0]?.includes(`</b> ${esc(chat.at(-1).text)}</div>`)) problems.push(`devices don't show the last chat message: ${chat.at(-1).text}`);
   fake?.close();
   if (!fake) { // leave a real database as it was
-    for (const path of [`rooms/${code}`, `seen/${code}/0`, `seen/${code}/1`]) await fetch(`${db}/${path}.json?x-http-method-override=DELETE`, { method: 'POST' });
+    for (const path of [`rooms/${code}`, `seen/${code}/0`, `seen/${code}/1`, `chat/${code}`]) await fetch(`${db}/${path}.json?x-http-method-override=DELETE`, { method: 'POST' });
   }
   const pings = Object.values(reports).flatMap((r) => r.pings);
   if (pings.some((p) => !p.endsWith(`-p2`))) problems.push(`alert sent to a seat that had the game on screen: ${pings.join(', ')}`);
   if (!pings.length) problems.push('no turn alerts were sent to Bob');
   if (room.seq < (fake ? 100 : 20)) problems.push(`only ${room.seq} saves`); // a real database is much slower than the fake
-  console.log(JSON.stringify({ code, saves: room.seq, turnNo: state.turnNo, over: state.over, clicks: Object.fromEntries(Object.entries(reports).map(([k, r]) => [k, r.clicks])), reloads: Object.fromEntries(Object.entries(reports).map(([k, r]) => [k, r.reloads])), pings: pings.length }));
+  console.log(JSON.stringify({ code, saves: room.seq, turnNo: state.turnNo, over: state.over, chat: chat.length, clicks: Object.fromEntries(Object.entries(reports).map(([k, r]) => [k, r.clicks])), reloads: Object.fromEntries(Object.entries(reports).map(([k, r]) => [k, r.reloads])), pings: pings.length }));
   if (problems.length) { console.log(problems.join('\n')); process.exit(1); }
   process.exit(0);
 }
@@ -81,17 +92,24 @@ let seed = [...role].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7) % 214748364
 const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 Math.random = rnd;
 
+// html is #app as a browser would show it: the game screen is a frame (see renderGame in ui.js)
+// whose g-* parts are filled in separately.
 let html = '';
+let frame = '';
+const parts = {};
+const rebuild = () => { html = frame.replace(/id="(g-[a-z]+)"[^>]*>/g, (tag, id) => tag + (parts[id] || '')); };
+const region = (id) => (frame.includes(`id="${id}"`) ? { set innerHTML(v) { parts[id] = v; rebuild(); } } : null);
 let clickHandler = null;
+let submitHandler = null;
 let visibilityHandler = null;
-const fields = { name: { value: name }, p2: { value: '' }, code: { value: '' } };
+const fields = { name: { value: name }, p2: { value: '' }, code: { value: '' }, 'chat-text': { value: '' } };
 const app = {
-  set innerHTML(v) { html = v; },
+  set innerHTML(v) { frame = v; for (const k in parts) delete parts[k]; rebuild(); },
   get innerHTML() { return html; },
-  addEventListener(type, fn) { if (type === 'click') clickHandler = fn; },
+  addEventListener(type, fn) { if (type === 'click') clickHandler = fn; if (type === 'submit') submitHandler = fn; },
 };
 globalThis.document = {
-  getElementById: (id) => (id === 'app' ? app : fields[id] || null),
+  getElementById: (id) => (id === 'app' ? app : fields[id] || region(id)),
   addEventListener: (type, fn) => { if (type === 'visibilitychange') visibilityHandler = fn; },
   visibilityState: hidden ? 'hidden' : 'visible',
   hasFocus: () => document.visibilityState === 'visible',
@@ -167,8 +185,10 @@ if (role === 'create') {
   else { await waitFor('data-lobby="seat"'); click({ lobby: 'seat', seat: '0' }); }
 }
 await waitFor('class="turn');
+parentPort.postMessage({ joined: true });
 
 let clicks = 0;
+let chats = 0;
 let reloads = 0;
 let reloadShown = false;
 const end = Date.now() + seconds * 1000;
@@ -177,6 +197,11 @@ while (Date.now() < end && !html.includes('Game over')) {
   if (html.includes('did not save') && !reloadShown) reloads++;
   reloadShown = html.includes('did not save');
   if (html.includes('<button class="secondary"  data-lobby="undo">') && rnd() < 0.1) { click({ lobby: 'undo' }); clicks++; continue; }
+  if (html.includes('id="chat-text"') && rnd() < 0.003) {
+    fields['chat-text'].value = `${role} says <hi> & ${++chats}`;
+    submitHandler({ preventDefault() {} });
+    continue;
+  }
   const acts = [...html.matchAll(/<button class="[^"]*" +(disabled)? *data-act="([^"]*)"/g)].filter((m) => !m[1]).map((m) => unesc(m[2]));
   if (!acts.length) continue;
   let pick = acts[Math.floor(rnd() * acts.length)];
@@ -187,13 +212,14 @@ while (Date.now() < end && !html.includes('Game over')) {
 
 // Let saves finish, reconnect any dropped stream as if the page were shown again, then compare views.
 parentPort.postMessage({ settling: true });
+await new Promise((resolve) => parentPort.once('message', resolve)); // every device has stopped
 await sleep(1000);
 document.visibilityState = 'visible';
 visibilityHandler?.();
 await sleep(1500);
 const part = (re) => html.match(re)?.[0] || '';
 const view = html.includes('class="turn') || html.includes('Game over')
-  ? [part(/<div class="turn[^>]*>.*?<\/div>/).replace(/class="turn[^"]*"/, 'class="turn"').replace(' (you)', ''), part(/<h2>Game over.*?<\/section>/s), part(/<div class="log">.*?<\/div><\/div>/s), part(/<summary>Current score estimate<\/summary>.*?<\/table>/s)].join('\n')
+  ? [part(/<div class="turn[^>]*>.*?<\/div>/).replace(/class="turn[^"]*"/, 'class="turn"').replace(' (you)', ''), part(/<h2>Game over.*?<\/section>/s), part(/<div class="log">.*?<\/div><\/div>/s), part(/<div class="chat-log">.*?<\/div><\/div>/s).replace(/<div class="(me)?">/g, '<div>'), part(/<summary>Current score estimate<\/summary>.*?<\/table>/s)].join('\n')
   : '';
 document.visibilityState = 'hidden';
 visibilityHandler?.();

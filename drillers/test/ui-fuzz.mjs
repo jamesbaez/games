@@ -7,15 +7,21 @@
 const GAMES = Number(process.argv[2] || 4);
 let seed = Number(process.argv[3] || 1);
 
+// html is #app as a browser would show it: the game screen is a frame (see renderGame in ui.js)
+// whose g-* parts are filled in separately.
 let html = '';
+let frame = '';
+const parts = {};
+const rebuild = () => { html = frame.replace(/id="(g-[a-z]+)"[^>]*>/g, (tag, id) => tag + (parts[id] || '')); };
+const region = (id) => (frame.includes(`id="${id}"`) ? { set innerHTML(v) { parts[id] = v; rebuild(); } } : null);
 let clickHandler = null;
 const fields = { name: { value: 'Ann' }, p2: { value: 'Bob' }, code: { value: '' } };
 const app = {
-  set innerHTML(v) { html = v; },
+  set innerHTML(v) { frame = v; for (const k in parts) delete parts[k]; rebuild(); },
   get innerHTML() { return html; },
   addEventListener(type, fn) { if (type === 'click') clickHandler = fn; },
 };
-globalThis.document = { getElementById: (id) => (id === 'app' ? app : fields[id] || null), addEventListener() {}, visibilityState: 'visible', hasFocus: () => true };
+globalThis.document = { getElementById: (id) => (id === 'app' ? app : fields[id] || region(id)), addEventListener() {}, visibilityState: 'visible', hasFocus: () => true };
 globalThis.addEventListener = () => {};
 const store = {};
 globalThis.localStorage = {

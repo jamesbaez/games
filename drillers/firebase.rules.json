@@ -15,6 +15,16 @@
           ".validate": "$code.matches(/^[A-Z]{8}$/) && newData.isNumber()"
         }
       }
+    },
+    "chat": {
+      "$code": {
+        ".read": true,
+        ".write": true,
+        ".validate": "$code.matches(/^[A-Z]{8}$/) && newData.hasChildren()",
+        "$id": {
+          ".validate": "newData.child('seat').isNumber() && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 500"
+        }
+      }
     }
   }
 }

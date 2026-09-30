@@ -5,6 +5,7 @@
 //     because the database would drop its empty arrays and nulls. It's missing until the second
 //     player joins; host is the creator's name.
 //   seen/<CODE>/<seat> = server time that seat last had the game on screen and in focus; removed when it leaves.
+//   chat/<CODE>/<id> = { seat, text }, one per chat message. The database picks the ids, which sort by time.
 // Turn alerts go to ntfy.sh, one topic per room and seat.
 const DB_URL = 'https://drillers-6dbe9-default-rtdb.firebaseio.com'; // see README.md
 const DB = (new URLSearchParams(globalThis.location?.search).get('db') || DB_URL).replace(/\/+$/, ''); // ?db= for local testing
@@ -60,32 +61,54 @@ export async function createRoom(host) {
   throw new Error('the database refused the new game');
 }
 
-// Calls onRoom with the room now and after every change. EventSource retries dropped connections itself;
-// call resume() when the page is shown again, in case the phone closed the stream while it slept.
-export function watchRoom(code, { onRoom, onStatus }) {
+// Keeps an EventSource open on path and passes its events to onEvent(type, { path, data }).
+// EventSource retries dropped connections itself; resume() reopens one the phone closed while it slept.
+function stream(path, onEvent, onStatus) {
   let es = null;
   let closed = false;
-  const refresh = () => getRoom(code).then((room) => closed || onRoom(room), () => closed || onStatus('Offline, retrying…'));
   const open = () => {
     es?.close();
-    const src = (es = new EventSource(dbUrl(`rooms/${code}`)));
+    const src = (es = new EventSource(dbUrl(path)));
     src.onopen = () => onStatus('Online');
     src.onerror = () => {
       if (closed) return;
       onStatus('Reconnecting…');
       if (src.readyState === EventSource.CLOSED) setTimeout(() => { if (!closed && es === src) open(); }, 5000);
     };
-    src.addEventListener('put', (e) => {
-      const { path, data } = JSON.parse(e.data);
-      if (path === '/') onRoom(decode(data)); else refresh();
-    });
-    src.addEventListener('patch', refresh);
+    for (const type of ['put', 'patch']) src.addEventListener(type, (e) => onEvent(type, JSON.parse(e.data)));
   };
   open();
   return {
-    resume() { if (es.readyState === EventSource.CLOSED) open(); refresh(); },
+    resume() { if (es.readyState === EventSource.CLOSED) open(); },
     close() { closed = true; es.close(); },
   };
+}
+
+// Calls onRoom with the room now and after every change, and onChat with the game's chat messages
+// ([{ id, seat, text }], oldest first) now and after every new one.
+// Call resume() when the page is shown again, in case the phone closed the streams while it slept.
+export function watchRoom(code, { onRoom, onChat, onStatus }) {
+  let closed = false;
+  const refresh = () => getRoom(code).then((room) => closed || onRoom(room), () => closed || onStatus('Offline, retrying…'));
+  const room = stream(`rooms/${code}`, (type, { path, data }) => {
+    if (type === 'put' && path === '/') onRoom(decode(data)); else refresh();
+  }, onStatus);
+  let msgs = {};
+  const chat = stream(`chat/${code}`, (type, { path, data }) => {
+    if (type === 'put' && path === '/') msgs = { ...data };
+    else msgs = { ...msgs, ...(path === '/' ? data : { [path.split('/')[1]]: data }) }; // messages are written whole
+    onChat(Object.keys(msgs).sort().filter((id) => typeof msgs[id]?.text === 'string').map((id) => ({ id, ...msgs[id] })));
+  }, () => {});
+  return {
+    resume() { room.resume(); chat.resume(); refresh(); },
+    close() { closed = true; room.close(); chat.close(); },
+  };
+}
+
+// Adds a message to a game's chat. A plain POST is the REST API's "push": the database picks the id.
+export async function postChat(code, seat, text) {
+  const res = await fetch(dbUrl(`chat/${code}`, '?print=silent'), { method: 'POST', body: JSON.stringify({ seat, text }) });
+  if (!res.ok) throw new Error(`database error ${res.status}`);
 }
 
 // here = true every 30 seconds while a seat has the game on screen and in focus, so its turn alerts
@@ -95,10 +118,10 @@ export const markSeen = (code, seat, here) => put(`seen/${code}/${seat}`, here ?
 export const alertTopic = (code, seat) => `drillers-${code.toLowerCase()}-p${seat + 1}`;
 
 // Sends a notification to a seat's ntfy topic, unless that seat has the game on screen.
-export async function notify(code, seat, message, click) {
+export async function notify(code, seat, message, click, tags = 'pick') {
   try {
     const seen = await (await fetch(dbUrl(`seen/${code}/${seat}`))).json();
     if (typeof seen === 'number' && Date.now() - seen < SEEN_FRESH_MS) return;
-    await fetch(`https://ntfy.sh/${alertTopic(code, seat)}?${new URLSearchParams({ title: 'Drillers', click, tags: 'pick' })}`, { method: 'POST', body: message });
+    await fetch(`https://ntfy.sh/${alertTopic(code, seat)}?${new URLSearchParams({ title: 'Drillers', click, tags })}`, { method: 'POST', body: message });
   } catch {}
 }

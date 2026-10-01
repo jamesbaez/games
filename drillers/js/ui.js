@@ -1,4 +1,4 @@
-import { setup, apply, cardDef, tileDef, floorCardDef, activeFloorCard, nextMineral, trackUsed, trackLimit, score, revealsInfo, GameError } from './engine.js';
+import { setup, apply, upgrade, undoable, cardDef, tileDef, floorCardDef, activeFloorCard, nextMineral, trackUsed, trackLimit, score, GameError } from './engine.js';
 import * as D from './data.js';
 import { onlineReady, createRoom, getRoom, writeRoom, watchRoom, postChat, markSeen, notify, alertTopic, packSave, unpackSave } from './net.js';
 
@@ -8,22 +8,20 @@ const LS = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
   del(k) { try { localStorage.removeItem(k); } catch {} },
 };
-const SAVE_VERSION = 2; // bump when the state shape changes so old saves are ignored
+const SAVE_VERSION = 3; // bump when the state shape changes so old saves are ignored (or upgraded, see upgrade in engine.js)
 const RULEBOOK = 'https://filemanager.czechgames.com/storage/files/drillers/rules/Drillers_rulebook_EN_2026-05-21.pdf';
 const OFFLINE = 'Could not reach the game server. Check your connection and try again.';
 const RELOADING = 'Reloading the game, try again in a moment.';
 
 // Re-renders replace #app, so remember which <details data-keep="name"> sections are open.
-const openSections = new Set();
+const openSections = new Set(['turn']);
 const keepOpen = (name) => `data-keep="${name}"${openSections.has(name) ? ' open' : ''}`;
 app.addEventListener('toggle', (e) => {
   const name = e.target.dataset?.keep;
   if (name) e.target.open ? openSections.add(name) : openSections.delete(name);
 }, true);
 
-// session: { mode: 'local'|'online'|'moved', state, status, undo, url }
-// undo: earlier states of this device's current turn, cleared when hidden info is revealed
-//   (also kept in localStorage, see storeUndo).
+// session: { mode: 'local'|'online'|'moved', state, status, url }
 // Online sessions also have: code, seat, host, net, beat (presence timer),
 //   seq: the latest write this device knows of (-1 while loading or reloading),
 //   confirmed: the latest state known to be saved, saving: promise chain of writes, gen: bumped to drop queued writes,
@@ -42,7 +40,7 @@ const esc = (x) => String(x).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '
 const MIN_ABBR = { silver: 'Ag', gold: 'Au', sapphire: 'Sa', emerald: 'Em', ruby: 'Ru' };
 const gem = (m) => `<span class="gem gem-${m}" title="${m}">${MIN_ABBR[m]}</span>`;
 const floorLabel = (f) => (f === 0 ? 'Surface' : f === 1 ? 'Entrance' : 'F' + f);
-const savedState = (st) => (st && st.v === SAVE_VERSION ? st : null);
+const savedState = (st) => { st = upgrade(st); return st?.v === SAVE_VERSION ? st : null; };
 const gameLink = (hash) => `${location.origin}${location.pathname}#${hash}`;
 const reloading = () => session.mode === 'online' && session.seq < 0;
 
@@ -93,7 +91,7 @@ async function lobbyTask(fn) {
 }
 
 function startLocal(state) {
-  session = { mode: 'local', state, status: 'Pass & play', undo: restoreUndo('local', state) };
+  session = { mode: 'local', state, status: 'Pass & play' };
   passCurtain = state.over ? null : state.current; // start behind the curtain so the first player isn't spoiled
   LS.set('drillers.local', state);
   render();
@@ -144,7 +142,7 @@ function startOnline(code, seat) {
   seatPick = null;
   LS.set('drillers.online', { code, seat });
   const read = LS.get('drillers.chatRead');
-  const me = { mode: 'online', code, seat, host: '', state: null, confirmed: null, seq: -1, undo: [], status: 'Connecting…', saving: Promise.resolve(), gen: 0,
+  const me = { mode: 'online', code, seat, host: '', state: null, confirmed: null, seq: -1, status: 'Connecting…', saving: Promise.resolve(), gen: 0,
     chat: [], chatRead: read?.code === code ? read.id : '' };
   session = me;
   me.net = watchRoom(code, {
@@ -178,17 +176,17 @@ addEventListener('blur', presenceChanged);
 // A room from the database: take it if it's newer than what this device has.
 function receive(me, room) {
   if (!room) { me.status = 'This game no longer exists.'; render(); return; }
-  if (room.state && !savedState(room.state)) { me.status = 'This game was saved by an older version and cannot continue.'; render(); return; }
+  const state = room.state && savedState(room.state);
+  if (room.state && !state) { me.status = 'This game was saved by an older version and cannot continue.'; render(); return; }
   if (room.seq <= me.seq) return; // our own save coming back, or older news
   if (me.seq >= 0) message = ''; // keep the "did not save" message after a reload
-  if (me.state?.current !== room.state?.current) keep = null;
-  Object.assign(me, { seq: room.seq, host: room.host, state: room.state, confirmed: room.state, undo: restoreUndo(undoGame(me), room.state) });
+  if (me.state?.current !== state?.current) keep = null;
+  Object.assign(me, { seq: room.seq, host: room.host, state, confirmed: state });
   render();
 }
 
 // Online moves show at once and save in order. If a save fails (offline, or another device saved first),
-// the saves queued behind it are dropped and the game reloads from the database (the undo stack
-// comes back with it, see restoreUndo).
+// the saves queued behind it are dropped and the game reloads from the database.
 function save(me, prev, next) {
   const room = { seq: ++me.seq, host: me.host, state: next };
   const gen = me.gen;
@@ -202,7 +200,7 @@ function save(me, prev, next) {
       return;
     }
     me.gen++;
-    Object.assign(me, { seq: -1, state: me.confirmed, undo: [] });
+    Object.assign(me, { seq: -1, state: me.confirmed });
     if (session !== me) return;
     message = 'Your last move did not save (offline, or the game changed on another device). Reloading the game…';
     keep = null;
@@ -303,7 +301,8 @@ if (startHash.startsWith('#move=') || startHash.startsWith('#room=')) history.re
 if (startHash.startsWith('#move=')) {
   unpackSave(startHash.slice(6))
     .then((m) => {
-      if (savedState(m.state) && m.mode === 'local') pendingMove = m;
+      const state = savedState(m.state);
+      if (state && m.mode === 'local') pendingMove = { mode: 'local', state };
       else alert('That link is from an older version of the game and cannot be loaded.');
     })
     .catch(() => alert('That move link is broken or incomplete.'))
@@ -312,38 +311,12 @@ if (startHash.startsWith('#move=')) {
 if (startHash.startsWith('#room=') && onlineReady) lobbyTask(() => openOnline(startHash.slice(6).toUpperCase()));
 
 // ---------- state changes ----------
-// The undo stack is also saved on this device after every change, so a reload or a failed save
-// doesn't lose it. It comes back only if the game loads at one of its states, so a move from
-// another device still clears it.
-const undoGame = (se) => (se.mode === 'online' ? `${se.code}/${se.seat}` : se.mode);
-function storeUndo() {
-  LS.set('drillers.undo', { game: undoGame(session), states: [...session.undo, session.state] });
-}
-function restoreUndo(game, state) {
-  const saved = LS.get('drillers.undo');
-  const json = JSON.stringify(state);
-  const i = saved?.game === game ? saved.states.findIndex((x) => JSON.stringify(x) === json) : -1;
-  return i < 0 ? [] : saved.states.slice(0, i);
-}
-
-function commit(next) {
-  const prev = session.state;
-  session.undo = revealsInfo(prev, next) ? [] : [...session.undo, prev];
-  show(next);
-}
-
-// Step back one of this device's actions, if nothing was revealed since.
-function undo() {
-  if (!session.undo.length) return false;
-  show(session.undo.pop());
-  return true;
-}
+LS.del('drillers.undo'); // the undo stack this device used to keep; undo now lives in the game state
 
 function show(next) {
   const prev = session.state;
   session.state = next;
   message = '';
-  storeUndo();
   if (session.mode === 'online') save(session, prev, next);
   if (session.mode === 'local') {
     LS.set('drillers.local', next);
@@ -358,7 +331,7 @@ function act(action) {
   if (reloading()) { message = RELOADING; render(); return; }
   const seat = session.mode === 'local' ? s.current : session.seat;
   try {
-    commit(apply(s, { ...action, p: seat }));
+    show(apply(s, { ...action, p: seat }));
   } catch (e) {
     message = e instanceof GameError ? e.message : 'Something went wrong.';
     if (!(e instanceof GameError)) console.error(e);
@@ -527,7 +500,6 @@ function endOpsBtns(s, p) {
 function actionsHtml(s, p) {
   const out = [];
   const fl = s.floors[p.floor];
-  out.push(`<button class="secondary" ${session.undo.length ? '' : 'disabled'} data-lobby="undo">↶ Undo</button>`);
   if (p.turn.repairs > 0 && s.phase !== 'upkeep') out.push(`<span class="muted">🔧 Repair with the button on a card in your hand, play area or top of deck, or under "Discard pile".</span>`);
   if (p.turn.draws) out.push(btn(`Draw ${p.turn.draws}`, { type: 'draw' }, { cls: 'primary' }), `<span class="muted">You can repair before drawing. Any other action draws first.</span>`);
   if (s.phase === 'ops') {
@@ -569,7 +541,66 @@ function actionsHtml(s, p) {
     const label = unused > 0 ? ` (${unused} free keep${unused > 1 ? 's' : ''} unused)` : k.size ? ` (keep ${k.size}, ${cost}⛽)` : '';
     out.push(btn(`End turn${label}`, { type: 'endTurn', keep: [...k] }, { cls: 'primary', disabled: p.fuel < cost }));
   }
-  return `<div class="actions">${out.join('')}</div>`;
+  return `<div class="actions">${out.join('')}</div>${turnHtml(s, p)}`;
+}
+
+// Short description of a move, for the "This turn" list.
+function moveLabel(s, p, a) {
+  const card = () => esc(cardDef(s, a.iid).name);
+  switch (a.type) {
+    case 'playMain': {
+      const c = cardDef(s, a.iid);
+      const opt = c.choose?.[a.option ?? 0];
+      return `Play ${card()}${opt ? ` (${esc(opt.label)})` : ''}${c.teleport ? ` → ${floorLabel(a.floor)}` : ''}`;
+    }
+    case 'playFuel': return `Burn ${card()} for fuel`;
+    case 'default': return { move: '3⛽ → 1↕️', drill: '4⛽ → 1⛏', damage: 'Take damage → 3⛽' }[a.kind];
+    case 'move': return a.dir < 0 ? '▲ Up' : '▼ Down';
+    case 'collect': return a.jackpot ? `Collect Jackpot ${gem('emerald')}` : `Collect ${gem(a.mineral)}${a.pay ? ' + 1c→1⛽' : ''}`;
+    case 'excavate': return 'Excavate corridor';
+    case 'barrier': return 'Drill barrier';
+    case 'ability': return `Use ${card()}${a.mineral ? ` on ${gem(a.mineral)}` : ''}`;
+    case 'repair': return `Repair ${card()}`;
+    case 'draw': return 'Draw';
+    case 'droneSell': return `Drone: sell ${gem(a.mineral)}`;
+    case 'droneBuy': return `Drone buy ${card()}`;
+    case 'exhaust': {
+      const d = tileDef(p.tiles[a.index].id);
+      return `Exhaust ${d.barrier ? 'barrier' : 'corridor'} F${d.floor}`;
+    }
+    case 'endOps': return p.floor === 0 ? 'End Operations → Surface' : 'End Operations';
+    case 'sell': return 'Sell all storage';
+    case 'discardCard': return `Discard ${card()} +${D.DISCARD_CREDITS}c`;
+    case 'upStorage': return 'Upgrade storage';
+    case 'upFuel': return 'Upgrade fuel tank';
+    case 'refuel': return 'Refuel';
+    case 'buy': return `Buy ${card()}`;
+    case 'refreshShop': return 'Refresh shop';
+    case 'endSurface': return 'Done surfacing';
+    default: return esc(a.type);
+  }
+}
+
+// Which of this turn's moves can be undone (see undoable in engine.js), worked out once per state.
+const undoCache = new WeakMap();
+function undoInfo(s) {
+  if (!undoCache.has(s)) undoCache.set(s, undoable(s));
+  return undoCache.get(s);
+}
+
+// This turn's moves, newest first, each with ↶ if it can be undone, or why not.
+function turnHtml(s, p) {
+  const moves = s.history?.moves || [];
+  if (!moves.length) return '';
+  const why = undoInfo(s);
+  const rows = moves.map(({ action }, i) => {
+    const undo = !why ? '' : why[i] === null
+      ? btn('↶ Undo', { type: 'undo', move: i }, { cls: 'small secondary' })
+      : `<span class="muted">can't undo: ${esc(why[i])}</span>`;
+    return `<div><span>${i + 1}. ${moveLabel(s, p, action)}</span>${undo}</div>`;
+  }).reverse().join('');
+  const note = why ? '' : `<div class="muted">This turn's moves can't be undone: their history doesn't match the game.</div>`;
+  return `<details ${keepOpen('turn')}><summary>This turn (${moves.length} move${moves.length > 1 ? 's' : ''})</summary><div class="turn-moves">${note}${rows}</div></details>`;
 }
 
 function handHtml(s, p, myTurn) {
@@ -754,7 +785,6 @@ app.addEventListener('click', (e) => {
   const lob = e.target.closest('[data-lobby]');
   if (!lob || lob.disabled) return;
   const what = lob.dataset.lobby;
-  if (what === 'undo' && (reloading() || !undo())) { message = reloading() ? RELOADING : 'Nothing to undo.'; render(); }
   if (what === 'create') lobbyTask(createOnline);
   if (what === 'join' || what === 'resumeOnline') {
     const code = what === 'join' ? document.getElementById('code').value.trim().toUpperCase() : LS.get('drillers.online').code;

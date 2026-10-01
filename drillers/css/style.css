@@ -89,6 +89,8 @@ label { display: block; margin-top: 8px; }
 .shop h3 { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 
 .log { background: var(--panel); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--muted); max-height: 240px; overflow-y: auto; }
+.turn-moves { background: var(--panel); border-radius: 6px; padding: 4px 8px; font-size: 12px; max-height: 200px; overflow-y: auto; }
+.turn-moves > div { display: flex; gap: 8px; align-items: center; justify-content: space-between; min-height: 30px; }
 .chat { display: flex; gap: 6px; margin-bottom: 6px; }
 .chat input { flex: 1; font-size: 16px; } /* 16px stops iPhones zooming in when the box is tapped */
 .chat-log { background: var(--panel); border-radius: 6px; padding: 6px 8px; max-height: 240px; overflow-y: auto; overflow-wrap: anywhere; }

@@ -70,22 +70,24 @@ click({ lobby: 'local' });
 for (let i = 0; i < 1000000 && games + abandoned < GAMES && !errors.length; i++) {
   if (html.includes('data-lobby="reveal"')) { click({ lobby: 'reveal' }); continue; }
   if (html.includes('Game over')) { games++; newGame(); continue; }
-  if (html.includes('<button class="secondary"  data-lobby="undo">') && rnd() < 0.1) { click({ lobby: 'undo' }); clicks++; continue; }
   if (clicks % 500 === 499 && JSON.parse(store['drillers.local']).turnNo > MAX_TURNS) {
     abandoned++;
     clicks++;
     newGame();
     continue;
   }
-  const acts = [...html.matchAll(/<button class="[^"]*" +(disabled)? *data-act="([^"]*)"/g)]
+  const enabled = [...html.matchAll(/<button class="[^"]*" +(disabled)? *data-act="([^"]*)"/g)]
     .filter((m) => !m[1]).map((m) => unesc(m[2]));
+  const undos = enabled.filter((a) => JSON.parse(a).type === 'undo'); // clicked sparingly, or games stall
+  const acts = enabled.filter((a) => !undos.includes(a));
   if (!acts.length) {
     console.log('No enabled actions on screen:\n' + html.slice(0, 1500));
     process.exit(1);
   }
   let pick = acts[Math.floor(rnd() * acts.length)];
+  if (undos.length && rnd() < 0.1) pick = undos[Math.floor(rnd() * undos.length)];
   // Occasionally force progress so games actually end.
-  if (rnd() < 0.08) pick = acts.find((a) => /endOps|endSurface|endTurn/.test(a)) || pick;
+  else if (rnd() < 0.08) pick = acts.find((a) => /endOps|endSurface|endTurn/.test(a)) || pick;
   click({ act: pick });
   clicks++;
 }

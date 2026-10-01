@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { setup, apply, cardDef, trackUsed, revealsInfo, GameError } from '../js/engine.js';
+import { setup, apply, cardDef, trackUsed, revealsInfo, undoable, upgrade, GameError } from '../js/engine.js';
 import * as D from '../js/data.js';
 
 const newGame = (seed = 42) => setup({ names: ['Ann', 'Bob'], seed, first: 0 });
@@ -48,6 +48,82 @@ test('revealsInfo: plain moves are undoable, draws/excavation/turn end are not',
   low.players[0].fuel = 2;
   assert.equal(apply(low, { p: 0, type: 'endSurface' }).players[0].fuel, low.players[0].fuelMax, 'finishing surfacing refuels');
   assert.equal(revealsInfo(e2, apply(e2, { p: 0, type: 'endTurn', keep: [] })), true);
+});
+
+test('the turn history records each move and clears when the turn passes', () => {
+  let s = newGame();
+  assert.equal(s.history, null);
+  s = apply(s, { p: 0, type: 'default', kind: 'move' });
+  s = apply(s, { p: 0, type: 'default', kind: 'drill' });
+  assert.deepEqual(s.history.moves.map((m) => [m.action.kind, m.revealed]), [['move', false], ['drill', false]]);
+  assert.deepEqual(undoable(s), [null, null]);
+  s = apply(s, { p: 0, type: 'endOps' });
+  s = apply(s, { p: 0, type: 'endSurface' });
+  assert.equal(s.history.moves.length, 4);
+  s = apply(s, { p: 0, type: 'endTurn', keep: [] });
+  assert.equal(s.history, null);
+  expectError(() => apply(s, { p: 0, type: 'undo', move: 0 }));
+});
+
+test('undoing the last move restores the state before it', () => {
+  const s0 = apply(newGame(), { p: 0, type: 'default', kind: 'move' });
+  const s1 = apply(s0, { p: 0, type: 'move', dir: 1 });
+  assert.deepEqual(apply(s1, { p: 0, type: 'undo', move: 1 }), s0);
+  expectError(() => apply(s1, { p: 1, type: 'undo', move: 1 })); // not your turn
+  expectError(() => apply(s1, { p: 0, type: 'undo', move: 2 }));
+});
+
+test('a move from before a reveal can still be undone, but not the reveal', () => {
+  let s = newGame();
+  Object.assign(s.players[0], { floor: 3, drills: 4, fuel: 9 });
+  s.floors[4].card = 'lobby';
+  for (let i = 0; i < 3; i++) s = apply(s, { p: 0, type: 'default', kind: 'move' });
+  s = apply(s, { p: 0, type: 'barrier' });
+  assert.deepEqual(undoable(s), [null, null, null, 'revealed hidden information']);
+  expectError(() => apply(s, { p: 0, type: 'undo', move: 3 }));
+
+  const u = apply(s, { p: 0, type: 'undo', move: 1 });
+  const p = u.players[0];
+  assert.deepEqual([p.fuel, p.moves, p.floor, p.credits], [3, 2, 4, s.players[0].credits]);
+  assert.equal(u.floors[4].cardUp, true);
+  assert.deepEqual(u.history.moves.map((m) => m.action.type), ['default', 'default', 'barrier']);
+  assert.deepEqual(undoable(u), [null, null, 'revealed hidden information']);
+});
+
+test('a move a later move depends on cannot be undone', () => {
+  let s = newGame();
+  Object.assign(s.players[0], { fuel: 3, moves: 0 });
+  s = apply(s, { p: 0, type: 'default', kind: 'move' });
+  s = apply(s, { p: 0, type: 'move', dir: 1 });
+  assert.deepEqual(undoable(s), ['move 2 needs it', null]);
+  expectError(() => apply(s, { p: 0, type: 'undo', move: 0 }));
+});
+
+test('a move that would change what a later move revealed cannot be undone', () => {
+  let s = newGame();
+  const reckless = giveCard(s, 'reckless_drilling'); // puts a DAMAGE on top of your deck
+  const dmg = giveCard(s, 'damage'); // draws 1
+  s.players[0].fuel = 5;
+  s = apply(s, { p: 0, type: 'playMain', iid: reckless });
+  s = apply(s, { p: 0, type: 'playMain', iid: dmg });
+  assert.equal(s.cards[s.players[0].hand.at(-1)], 'damage', 'drew the DAMAGE Reckless Drilling put on the deck');
+  // Without Reckless Drilling the draw would have been a different card.
+  assert.deepEqual(undoable(s), ['would change what move 2 revealed', 'revealed hidden information']);
+});
+
+test('the turn history is ignored if it no longer matches the game', () => {
+  let s = apply(newGame(), { p: 0, type: 'default', kind: 'move' });
+  s.players[0].credits += 5; // edited by hand
+  assert.equal(undoable(s), null);
+  expectError(() => apply(s, { p: 0, type: 'undo', move: 0 }));
+});
+
+test('v2 saves load with an empty turn history', () => {
+  const { history, ...old } = newGame();
+  const s = upgrade({ ...old, v: 2 });
+  assert.equal(s.v, 3);
+  assert.equal(s.history, null);
+  assert.equal(apply(s, { p: 0, type: 'default', kind: 'move' }).history.moves.length, 1);
 });
 
 test('first player is random and starting credits and cards follow turn order', () => {
@@ -289,7 +365,8 @@ test('floor cards: Jackpot emeralds and Cave With No Ceiling', () => {
 });
 
 // A simple greedy bot plays full games to make sure the engine never breaks and games end.
-function botTurn(s) {
+// check(s) runs in Upkeep, before the turn ends.
+function botTurn(s, check) {
   const P = () => s.players[s.current];
   const tryAct = (a) => { try { s = apply(s, { ...a, p: s.current }); return true; } catch (e) { if (!(e instanceof GameError)) throw e; return false; } };
   for (const iid of [...P().hand]) {
@@ -326,6 +403,7 @@ function botTurn(s) {
     tryAct({ type: 'refuel' });
     tryAct({ type: 'endSurface' });
   }
+  check?.(s);
   const ok = tryAct({ type: 'endTurn', keep: [] });
   assert.ok(ok, 'endTurn should always be legal in upkeep');
   return s;
@@ -385,4 +463,23 @@ test('bot games run to completion without engine errors', () => {
     assert.ok(s.over, `seed ${seed} did not finish in 600 turns`);
     assert.ok(Number.isFinite(s.scores[0].total));
   }
+});
+
+test('in bot games every turn replays, and each allowed undo leaves a turn that replays', () => {
+  let undos = 0;
+  const check = (s) => {
+    const why = undoable(s);
+    assert.ok(why, `turn ${s.turnNo}: the history should replay to the current state`);
+    why.forEach((w, i) => {
+      if (w !== null) return;
+      const u = apply(s, { p: s.current, type: 'undo', move: i });
+      assert.equal(u.history?.moves.length ?? 0, why.length - 1);
+      if (undos++ % 10 === 0) assert.ok(undoable(u), `turn ${s.turnNo}: undoing move ${i + 1} should leave a turn that replays`);
+    });
+  };
+  for (const seed of [1, 2]) {
+    let s = newGame(seed);
+    while (!s.over && s.turnNo < 600) s = botTurn(s, check);
+  }
+  assert.ok(undos > 100);
 });

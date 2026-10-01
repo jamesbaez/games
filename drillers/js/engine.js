@@ -55,8 +55,8 @@ function mk(s, defId) {
 export function setup({ names, seed = Date.now(), first }) {
   const n = names.length;
   const s = {
-    v: 2, rng: seed >>> 0, cards: {}, nextId: 1, log: [], current: 0, phase: 'ops',
-    over: false, endBy: null, finalTurns: null, turnNo: 1, scores: null,
+    v: 3, rng: seed >>> 0, cards: {}, nextId: 1, log: [], current: 0, phase: 'ops',
+    over: false, endBy: null, finalTurns: null, turnNo: 1, scores: null, history: null,
   };
   s.floors = D.FLOORS.map((f) => ({ minerals: [...f.minerals], corridors: [], barrier: !!f.barrier, card: null, cardUp: false, jackpot: null }));
   for (const f of [2, 3, 4, 5, 6]) {
@@ -102,6 +102,9 @@ export function setup({ names, seed = Date.now(), first }) {
   log(s, `Game started. ${s.players[s.current].name} goes first.`);
   return s;
 }
+
+// Saves from before the turn history (v2) load with an empty one.
+export const upgrade = (s) => (s?.v === 2 ? { ...s, v: 3, history: null } : s);
 
 // ---------- helpers ----------
 function reshuffleIfEmpty(s, p) {
@@ -367,7 +370,7 @@ export function score(s, p) {
 }
 
 // True if going from prev to next exposed hidden information (cards drawn or reshuffled,
-// the next corridor tile, a floor card, shop cards) or passed the turn. Undo stops there.
+// the next corridor tile, a floor card, shop cards) or passed the turn. Such a move can't be undone.
 export function revealsInfo(prev, next) {
   if (next.current !== prev.current || next.over || next.rng !== prev.rng || next.advExpanded !== prev.advExpanded) return true;
   if (next.floors.some((f, i) => f.corridors.length !== prev.floors[i].corridors.length || f.cardUp !== prev.floors[i].cardUp)) return true;
@@ -376,10 +379,102 @@ export function revealsInfo(prev, next) {
 }
 
 // ---------- actions ----------
+// The state keeps the current turn's history, so a move can be taken back later in the turn
+// (see undoMove): history = { start: the state before the turn's first move, moves: [{ action, revealed }] },
+// or null before the first move.
 export function apply(state, action) {
-  const s = structuredClone(state);
+  if (action.type === 'undo') return undoMove(state, action);
+  const { history, ...prev } = state;
+  const s = structuredClone(prev);
   step(s, action);
+  const revealed = revealsInfo(prev, s);
+  s.history = s.current !== prev.current || s.over ? null : {
+    start: history?.start ?? structuredClone(prev),
+    moves: [...(history?.moves || []), { action, revealed }],
+  };
   return s;
+}
+
+// ---------- undo ----------
+// The current turn as states: before its first move, then after each move. Null if the history
+// doesn't lead to this state (edited by hand, or recorded under older rules).
+function replayTurn(s) {
+  if (!s.history) return [s];
+  const states = [s.history.start];
+  try {
+    for (const { action } of s.history.moves) states.push(apply(states.at(-1), action));
+  } catch (e) {
+    if (e instanceof GameError) return null;
+    throw e;
+  }
+  return JSON.stringify(states.at(-1)) === JSON.stringify(s) ? states : null;
+}
+
+// What a move exposed: for each hidden zone it changed (a deck, a shop deck, the advanced shop's
+// extra cards, a corridor stack, a floor card, the shuffle seed), what that zone holds afterwards
+// and what it handed out.
+function exposed(b, a) {
+  const changed = (x, y) => JSON.stringify(x) !== JSON.stringify(y);
+  return JSON.stringify([
+    a.rng !== b.rng && a.rng,
+    a.players.map((p, i) => changed(p.deck, b.players[i].deck) && [p.deck, p.hand.filter((x) => !b.players[i].hand.includes(x))]),
+    D.SHOPS.map(({ id }) => changed(a.shops[id].deck, b.shops[id].deck) && a.shops[id]),
+    changed(a.advUnder, b.advUnder) && a.shops.adv.row,
+    a.floors.map((f, i) => (changed(f.corridors, b.floors[i].corridors) || f.cardUp !== b.floors[i].cardUp) && [f.corridors, f.card]),
+  ]);
+}
+
+// Replays the turn without move i. Refused if move i revealed something, if a later move fails
+// without it, or if a later move would reveal anything different.
+function takeBack(states, i) {
+  const { moves } = states.at(-1).history;
+  if (moves[i].revealed) fail('revealed hidden information');
+  let s = states[i];
+  for (let j = i + 1; j < moves.length; j++) {
+    let next;
+    try {
+      next = apply(s, moves[j].action);
+    } catch (e) {
+      if (e instanceof GameError) fail(`move ${j + 1} needs it`);
+      throw e;
+    }
+    if ((moves[j].revealed || revealsInfo(s, next)) && exposed(states[j], states[j + 1]) !== exposed(s, next)) {
+      fail(`would change what move ${j + 1} revealed`);
+    }
+    s = next;
+  }
+  return s;
+}
+
+// For each move this turn: null if it can be undone, otherwise why not.
+// Null instead of a list if this turn's history can't be replayed.
+export function undoable(s) {
+  const states = replayTurn(s);
+  if (!states) return null;
+  return (s.history?.moves || []).map((_, i) => {
+    try {
+      takeBack(states, i);
+      return null;
+    } catch (e) {
+      if (e instanceof GameError) return e.message;
+      throw e;
+    }
+  });
+}
+
+// The { type: 'undo', move } action: move is an index into history.moves.
+function undoMove(s, { p, move }) {
+  if (s.over) fail('The game is over.');
+  if (p !== s.current) fail('It is not your turn.');
+  if (!Number.isInteger(move) || !s.history?.moves[move]) fail('Nothing to undo.');
+  const states = replayTurn(s);
+  if (!states) fail("This turn's history doesn't match the game, so it can't be undone.");
+  try {
+    return structuredClone(takeBack(states, move)); // the turn's start state is shared with other states
+  } catch (e) {
+    if (e instanceof GameError) fail(`Can't undo move ${move + 1}: ${e.message}.`);
+    throw e;
+  }
 }
 
 const OPS = new Set(['playMain', 'playFuel', 'default', 'move', 'collect', 'excavate', 'barrier', 'ability', 'droneSell', 'droneBuy', 'endOps']);

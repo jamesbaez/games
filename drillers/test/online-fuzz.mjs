@@ -196,16 +196,18 @@ while (Date.now() < end && !html.includes('Game over')) {
   await sleep(rnd() * 4);
   if (html.includes('did not save') && !reloadShown) reloads++;
   reloadShown = html.includes('did not save');
-  if (html.includes('<button class="secondary"  data-lobby="undo">') && rnd() < 0.1) { click({ lobby: 'undo' }); clicks++; continue; }
   if (html.includes('id="chat-text"') && rnd() < 0.003) {
     fields['chat-text'].value = `${role} says <hi> & ${++chats}`;
     submitHandler({ preventDefault() {} });
     continue;
   }
-  const acts = [...html.matchAll(/<button class="[^"]*" +(disabled)? *data-act="([^"]*)"/g)].filter((m) => !m[1]).map((m) => unesc(m[2]));
+  const enabled = [...html.matchAll(/<button class="[^"]*" +(disabled)? *data-act="([^"]*)"/g)].filter((m) => !m[1]).map((m) => unesc(m[2]));
+  const undos = enabled.filter((a) => JSON.parse(a).type === 'undo'); // clicked sparingly, or games stall
+  const acts = enabled.filter((a) => !undos.includes(a));
   if (!acts.length) continue;
   let pick = acts[Math.floor(rnd() * acts.length)];
-  if (rnd() < 0.08) pick = acts.find((a) => /endOps|endSurface|endTurn/.test(a)) || pick;
+  if (undos.length && rnd() < 0.1) pick = undos[Math.floor(rnd() * undos.length)];
+  else if (rnd() < 0.08) pick = acts.find((a) => /endOps|endSurface|endTurn/.test(a)) || pick;
   click({ act: pick });
   clicks++;
 }

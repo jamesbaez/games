@@ -214,6 +214,21 @@ test('a card that draws and repairs lets you repair the top card before drawing'
   assert.equal(moved.players[0].turn.draws, 0);
 });
 
+test('repairing the last card of the deck shuffles the discard pile into a new deck', () => {
+  let s = newGame();
+  const pit = giveCard(s, 'pit_stop');
+  s = apply(s, { p: 0, type: 'playMain', iid: pit });
+  const p = s.players[0];
+  const dmg = 'c' + s.nextId++;
+  s.cards[dmg] = 'damage';
+  p.discard.push(...p.deck);
+  p.deck = [dmg];
+  const discarded = [...p.discard];
+  s = apply(s, { p: 0, type: 'repair', iid: dmg });
+  assert.deepEqual([...s.players[0].deck].sort(), discarded.sort());
+  assert.deepEqual(s.players[0].discard, []);
+});
+
 test('excavating a corridor adds minerals and a tile', () => {
   let s = newGame();
   s.players[0].floor = 2;

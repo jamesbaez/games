@@ -233,6 +233,7 @@ function repairCard(s, p, iid) {
   p[zone] = p[zone].filter((x) => x !== iid);
   if (s.cards[iid] === 'damage') s.damagePile++;
   log(s, `${p.name} repairs away ${cardDef(s, iid).name}.`);
+  if (zone === 'deck') reshuffleIfEmpty(s, p);
   if (zone === 'hand') draw(s, p, 1);
 }
 

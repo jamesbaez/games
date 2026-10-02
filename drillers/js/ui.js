@@ -551,7 +551,7 @@ function moveLabel(s, p, a) {
     case 'playMain': {
       const c = cardDef(s, a.iid);
       const opt = c.choose?.[a.option ?? 0];
-      return `Play ${card()}${opt ? ` (${esc(opt.label)})` : ''}${c.teleport ? ` → ${floorLabel(a.floor)}` : ''}`;
+      return `Play ${card()}${opt ? ` (${esc(opt.label)})` : ''}${c.teleport ? ` → ${floorLabel(a.floor)}` : ''}${a.solid ? `, burn ${gem(a.solid)}` : ''}`;
     }
     case 'playFuel': return `Burn ${card()} for fuel`;
     case 'default': return { move: '3⛽ → 1↕️', drill: '4⛽ → 1⛏', damage: 'Take damage → 3⛽' }[a.kind];
@@ -609,11 +609,15 @@ function handHtml(s, p, myTurn) {
     let b = '';
     if (myTurn && s.phase === 'ops') {
       const can = c.play === 'solid' ? p.storage.length > 0 : p.fuel >= c.play;
-      const costLabel = c.play === 'solid' ? 'burn mineral' : `${c.play}⛽`;
-      const base = { type: 'playMain', iid };
-      if (c.choose) c.choose.forEach((o, i) => { b += btn(`Play: ${o.label} (${costLabel})`, { ...base, option: i }, { disabled: !can }); });
-      else if (c.teleport) s.floors.forEach((f, fi) => { if (!f.barrier && fi !== p.floor) b += btn(`Play → ${floorLabel(fi)}`, { ...base, floor: fi }, { disabled: !can }); });
-      else b += btn(`Play (${costLabel})`, base, { disabled: !can });
+      // Solid fuel: one set of Play buttons per mineral type in storage, cheapest first.
+      const solids = c.play === 'solid' && can ? D.MINERALS.filter((m) => p.storage.includes(m)) : [null];
+      for (const m of solids) {
+        const costLabel = m ? `burn ${gem(m)}` : c.play === 'solid' ? 'burn mineral' : `${c.play}⛽`;
+        const base = { type: 'playMain', iid, ...(m && { solid: m }) };
+        if (c.choose) c.choose.forEach((o, i) => { b += btn(`Play: ${o.label} (${costLabel})`, { ...base, option: i }, { disabled: !can }); });
+        else if (c.teleport) s.floors.forEach((f, fi) => { if (!f.barrier && fi !== p.floor) b += btn(`Play → ${floorLabel(fi)}`, { ...base, floor: fi }, { disabled: !can }); });
+        else b += btn(`Play (${costLabel})`, base, { disabled: !can });
+      }
       b += btn(`Burn +${c.fuel}⛽`, { type: 'playFuel', iid }, { cls: 'secondary' });
     }
     if (myTurn && s.phase === 'surface') b += btn(`Discard +${D.DISCARD_CREDITS}c`, { type: 'discardCard', iid }, { cls: 'secondary' });

@@ -76,7 +76,7 @@ This summarizes the official rulebook (`ref/rulebook/`) plus the component photo
 - **Drone buys** happen during Operations and can't use the shop refresh tile.
 
 **Card choices made automatically or by default**
-- **Solid fuel:** the engine takes an optional `solid` mineral parameter; the UI always burns the cheapest stored mineral.
+- **Solid fuel:** the engine takes an optional `solid` mineral parameter; the UI shows a Play button for each mineral type in storage.
 - **Current-C Miner** moves the top mineral of the cheapest non-empty market column to overflow (optional `market` parameter). With an empty market, nothing happens.
 - **Choice cards** (Torso, Footless Treads, Utility Bot, Transformer Drill) take an `option` index. Transformer Drill's "2× (1 drill / 2 moves)" is modelled as three options: 2⛏, 1⛏ + 2↕️, 4↕️.
 

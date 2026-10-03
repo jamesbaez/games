@@ -551,7 +551,7 @@ function moveLabel(s, p, a) {
     case 'playMain': {
       const c = cardDef(s, a.iid);
       const opt = c.choose?.[a.option ?? 0];
-      return `Play ${card()}${opt ? ` (${esc(opt.label)})` : ''}${c.teleport ? ` → ${floorLabel(a.floor)}` : ''}${a.solid ? `, burn ${gem(a.solid)}` : ''}`;
+      return `Play ${card()}${opt ? ` (${esc(opt.label)})` : ''}${c.teleport ? ` → ${floorLabel(a.floor)}` : ''}${a.solid ? `, burn ${gem(a.solid)}` : ''}${a.market ? `, ${gem(a.market)} → overflow` : ''}`;
     }
     case 'playFuel': return `Burn ${card()} for fuel`;
     case 'default': return { move: '3⛽ → 1↕️', drill: '4⛽ → 1⛏', damage: 'Take damage → 3⛽' }[a.kind];
@@ -616,6 +616,8 @@ function handHtml(s, p, myTurn) {
         const base = { type: 'playMain', iid, ...(m && { solid: m }) };
         if (c.choose) c.choose.forEach((o, i) => { b += btn(`Play: ${o.label} (${costLabel})`, { ...base, option: i }, { disabled: !can }); });
         else if (c.teleport) s.floors.forEach((f, fi) => { if (!f.barrier && fi !== p.floor) b += btn(`Play → ${floorLabel(fi)}`, { ...base, floor: fi }, { disabled: !can }); });
+        // Current-C Miner: one Play button per non-empty market column.
+        else if (c.marketToOverflow && D.MINERALS.some((x) => p.market[x] > 0)) D.MINERALS.forEach((x) => { if (p.market[x] > 0) b += btn(`Play (${costLabel}): ${gem(x)} market → overflow`, { ...base, market: x }, { disabled: !can }); });
         else b += btn(`Play (${costLabel})`, base, { disabled: !can });
       }
       b += btn(`Burn +${c.fuel}⛽`, { type: 'playFuel', iid }, { cls: 'secondary' });

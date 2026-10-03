@@ -77,7 +77,7 @@ This summarizes the official rulebook (`ref/rulebook/`) plus the component photo
 
 **Card choices made automatically or by default**
 - **Solid fuel:** the engine takes an optional `solid` mineral parameter; the UI shows a Play button for each mineral type in storage.
-- **Current-C Miner** moves the top mineral of the cheapest non-empty market column to overflow (optional `market` parameter). With an empty market, nothing happens.
+- **Current-C Miner** moves the top mineral of a market column of the player's choice to overflow (rulebook FAQ 12). The engine takes a `market` parameter, or the cheapest non-empty column without one; the UI shows a Play button for each non-empty column. With an empty market, nothing happens.
 - **Choice cards** (Torso, Footless Treads, Utility Bot, Transformer Drill) take an `option` index. Transformer Drill's "2× (1 drill / 2 moves)" is modelled as three options: 2⛏, 1⛏ + 2↕️, 4↕️.
 
 **Card abilities and passives**

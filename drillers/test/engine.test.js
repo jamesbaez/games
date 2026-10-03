@@ -291,6 +291,19 @@ test('market pays falling prices then overflow', () => {
   assert.deepEqual(q.overflow, ['emerald']);
 });
 
+test('Current-C Miner moves the top mineral of the chosen market column to overflow', () => {
+  const s = newGame();
+  const p = s.players[0];
+  p.fuel = 5;
+  p.market.silver = 2;
+  p.market.ruby = 1;
+  const miner = giveCard(s, 'current_miner');
+  const q = apply(s, { p: 0, type: 'playMain', iid: miner, market: 'ruby' }).players[0];
+  assert.equal(q.market.ruby, 0);
+  assert.equal(q.market.silver, 2);
+  assert.deepEqual(q.overflow, ['ruby']);
+});
+
 test('upkeep keeps one card free and charges fuel for extras', () => {
   let s = newGame();
   s = apply(s, { p: 0, type: 'endOps' });

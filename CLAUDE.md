@@ -130,5 +130,5 @@ Never commit anything from `ref/`. The files are large and contain the publisher
 - Online play replaced the PeerJS version on 2026-09-17. The database is the owner's Firebase project `drillers-6dbe9`. It has been tested with `online-fuzz` against both the fake and the real database, and with two copies of the page in headless Chrome against the real one, but **not yet on real phones**, and ntfy alerts have not been received on a real device.
 - Solo mode (the bot boards on the back of the dashboards) is not implemented.
 - An advanced card's Buy button stays enabled without a battery tile; the engine rejects it with a message.
-- Some choices are made automatically: Current-C Miner moves the cheapest market column, and Toys R' Rust burns the cheapest stored mineral.
+- Some choices are made automatically: Toys R' Rust burns the cheapest stored mineral.
 - Bot simulations run long (~35 turns per player), but the bots are dumb, so this isn't a real pacing signal.

@@ -522,7 +522,11 @@ function step(s, a) {
       }
       if (c.marketToOverflow) {
         const col = a.market && p.market[a.market] > 0 ? a.market : D.MINERALS.find((m) => p.market[m] > 0);
-        if (col) { p.market[col]--; toOverflow(s, p, col); }
+        if (col) {
+          p.market[col]--;
+          log(s, `${p.name} moves a ${col} from their market to overflow.`);
+          toOverflow(s, p, col);
+        }
       }
       if (c.teleport) p.floor = a.floor;
       break;

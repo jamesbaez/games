@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { setup, apply, cardDef, trackUsed, revealsInfo, undoable, upgrade, GameError } from '../js/engine.js';
+import { setup, apply, cardDef, trackUsed, revealsInfo, undoable, upgrade, winners, GameError } from '../js/engine.js';
 import * as D from '../js/data.js';
 
 const newGame = (seed = 42) => setup({ names: ['Ann', 'Bob'], seed, first: 0 });
@@ -346,6 +346,15 @@ test('completing the progress track gives everyone else one final turn', () => {
   assert.equal(s.over, true);
   assert.ok(s.scores[0].milestones >= 18);
   assert.equal(s.scores[0].depth, -7);
+});
+
+test('a tie on points, credits and fuel is a shared win', () => {
+  const s = newGame();
+  s.scores = [{ total: 127 }, { total: 127 }];
+  s.players.forEach((p) => { p.credits = 0; p.fuel = 2; });
+  assert.deepEqual(winners(s), [0, 1]);
+  s.players[1].fuel = 3;
+  assert.deepEqual(winners(s), [1]);
 });
 
 test('advanced cards need a battery tile', () => {

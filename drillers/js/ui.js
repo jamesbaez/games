@@ -1,4 +1,4 @@
-import { setup, apply, upgrade, undoable, cardDef, tileDef, floorCardDef, activeFloorCard, nextMineral, trackUsed, trackLimit, score, GameError } from './engine.js';
+import { setup, apply, upgrade, undoable, winners, cardDef, tileDef, floorCardDef, activeFloorCard, nextMineral, trackUsed, trackLimit, score, GameError } from './engine.js';
 import * as D from './data.js';
 import { onlineReady, createRoom, getRoom, writeRoom, watchRoom, postChat, markSeen, notify, alertTopic, packSave, unpackSave } from './net.js';
 
@@ -212,7 +212,7 @@ function save(me, prev, next) {
 function alertOthers(me, prev, next) {
   const link = gameLink(`room=${me.code}`);
   if (next.over && !prev.over) {
-    next.players.forEach((p, i) => { if (i !== me.seat) notify(me.code, i, `Game over: ${next.players[next.winner].name} wins.`, link); });
+    next.players.forEach((p, i) => { if (i !== me.seat) notify(me.code, i, `Game over: ${resultText(next)}.`, link); });
   } else if (!next.over && next.current !== prev.current && next.current !== me.seat) {
     notify(me.code, next.current, `Your turn against ${next.players[me.seat].name}.`, link);
   }
@@ -676,10 +676,15 @@ function shopsHtml(s, p, myTurn) {
   }).join('');
 }
 
+function resultText(s) {
+  const w = winners(s);
+  return `${w.map((i) => s.players[i].name).join(' and ')} ${w.length > 1 ? 'tie' : 'wins'}`;
+}
+
 function scoresHtml(s) {
   const rows = s.players.map((p, i) => {
     const sc = s.scores?.[i] || score(s, p);
-    return `<tr class="${s.winner === i ? 'good' : ''}"><td>${esc(p.name)}</td><td>${sc.tiles}</td><td>${sc.minerals}</td><td>${sc.credits}</td><td>${sc.milestones}</td><td>${sc.refresh}</td><td>${sc.depth}</td><td>${sc.cards}</td><td><b>${sc.total}</b></td></tr>`;
+    return `<tr class="${s.over && winners(s).includes(i) ? 'good' : ''}"><td>${esc(p.name)}</td><td>${sc.tiles}</td><td>${sc.minerals}</td><td>${sc.credits}</td><td>${sc.milestones}</td><td>${sc.refresh}</td><td>${sc.depth}</td><td>${sc.cards}</td><td><b>${sc.total}</b></td></tr>`;
   }).join('');
   return `<div class="table-wrap"><table><tr><th></th><th>Tiles</th><th>Minerals</th><th>Credits</th><th>Milestones</th><th>Refresh</th><th>Depth</th><th>Cards</th><th>Total</th></tr>${rows}</table></div>`;
 }
@@ -743,7 +748,7 @@ function renderGame() {
       <div><a href="${RULEBOOK}" target="_blank" rel="noopener">Rules</a> ${session.mode === 'local' ? '<button class="small secondary" data-lobby="move">Move device</button>' : ''} <button class="small secondary" data-lobby="leave">Menu</button></div>
     </header>
     ${session.mode === 'online' ? alertsHtml() : ''}
-    ${s.over ? `<section><h2>Game over — ${esc(s.players[s.winner].name)} wins!</h2>${scoresHtml(s)}</section>` : ''}
+    ${s.over ? `<section><h2>Game over — ${esc(resultText(s))}!</h2>${scoresHtml(s)}</section>` : ''}
     ${s.endBy !== null && !s.over ? '<div class="alert">The mine is collapsing — final turns!</div>' : ''}
     <div class="hud ${myTurn ? 'mine' : ''}">
       ${s.over ? '' : `<div class="turn">Turn ${s.turnNo}: <b>${esc(cur.name)}</b> — ${phaseName}${myTurn ? ' (you)' : ''}</div>`}

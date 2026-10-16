@@ -62,7 +62,7 @@ This summarizes the official rulebook (`ref/rulebook/`) plus the component photo
 - **Scoring:**
   - **Points for:** tile points (minus losses for exhausted tiles); every mineral in market, overflow and storage; 1 per 5 credits; milestone tokens; 1 for an unused refresh tile.
   - **Points against:** the depth penalty, and every negative-point card still owned (deck, hand, discard and play area).
-  - **Ties:** most credits wins, then most fuel.
+  - **Ties:** most credits wins, then most fuel. The rulebook stops there, so players still tied share the win.
 
 ## Interpretations and edge cases (engine behaviour)
 

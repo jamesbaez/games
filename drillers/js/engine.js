@@ -772,13 +772,21 @@ function step(s, a) {
   }
 }
 
+// Seats in first place after the tie-breakers (most credits, then most fuel). More than one is a shared win.
+export function winners(s) {
+  const cmp = (a, b) =>
+    s.scores[b].total - s.scores[a].total ||
+    s.players[b].credits - s.players[a].credits ||
+    s.players[b].fuel - s.players[a].fuel;
+  const order = s.players.map((p, i) => i).sort(cmp);
+  return order.filter((i) => cmp(i, order[0]) === 0);
+}
+
 function gameOver(s) {
   s.over = true;
   s.scores = s.players.map((p) => score(s, p));
-  const order = s.players.map((p, i) => i).sort((a, b) =>
-    s.scores[b].total - s.scores[a].total ||
-    s.players[b].credits - s.players[a].credits ||
-    s.players[b].fuel - s.players[a].fuel);
-  s.winner = order[0];
-  log(s, `The mine collapses! ${s.players[s.winner].name} wins with ${s.scores[s.winner].total} points.`);
+  const w = winners(s);
+  s.winner = w[0]; // kept for devices still running older code
+  const names = w.map((i) => s.players[i].name).join(' and ');
+  log(s, `The mine collapses! ${names} ${w.length > 1 ? 'tie' : 'wins'} with ${s.scores[w[0]].total} points.`);
 }

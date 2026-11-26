@@ -1133,7 +1133,10 @@ function choose(s, p, opt) {
       const tok = s.pirates[i];
       s.pirates[i] = null;
       log(s, `${p.name} takes on the pirate and wins.`);
-      takeDamage(s, p, 1);
+      // A fight normally costs 1 damage. Turbo-Lasers ("Ignore the damage") asks with
+      // safe set, so the hit never lands.
+      if (f.safe) log(s, `${p.name} ignores the damage.`);
+      else takeDamage(s, p, 1);
       if (tok.reward === 'android') {
         p.ready.push(D.ANDROID);
         afterTrigger(s, p, 'afterFightAndroid');

@@ -1077,3 +1077,26 @@ test('an observer fires on any line of its colour, not just the first', () => {
     assert.ok(D.MISSIONS.some((m) => D.missionHasColor(m, t.c)), `${t.id} can fire at all`);
   }
 });
+
+test('Turbo-Lasers fights without taking the damage', () => {
+  const setUpFight = (safe) => {
+    const g = newGame();
+    const p = g.players[g.current];
+    const i = routesAt(p.at).find((j) => g.pirates[j]) ?? routesAt(p.at)[0];
+    g.pirates[i] = { c: D.ROUTES[i].c ?? 'red', reward: 'android' };
+    g.players[g.current].cargo = g.players[g.current].cargo.map(() => null);
+    g.pending = [{ k: 'ask', q: 'fight', ...(safe ? { safe: true } : {}) }];
+    const before = damageCount(g.players[g.current]);
+    let out = act(g, { type: 'choose', opt: i });
+    while (ask(out)) out = act(out, { type: 'choose', opt: pick(out) });
+    // The ship starts with damaged tech slots, so compare the change, not the total.
+    return damageCount(out.players[out.current]) - before;
+  };
+  assert.equal(setUpFight(false), 1, 'a plain fight costs 1 damage');
+  assert.equal(setUpFight(true), 0, 'with Turbo-Lasers it costs none');
+});
+
+test('the only card that fights safely is the one printed that way', () => {
+  const safe = D.TECHS.filter((t) => JSON.stringify(t).includes('fightSafe')).map((t) => t.id);
+  assert.deepEqual(safe, ['turbo_lasers']);
+});

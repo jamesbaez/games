@@ -162,6 +162,18 @@ export const LOCS = [
   { id: 'rock', name: 'Rock' },
 ];
 
+// Where each planet sits on img/board.webp, as a percentage of the picture's width and
+// height, so the UI can put live markers (missions, tiles, stations, ships) on the photo.
+// Read off the picture by hand against a 100px grid; good to about half a planet's width,
+// which is all a marker needs. Routes are not mapped: they curve so much that a marker at
+// the straight-line midpoint would often sit on top of a different route's planet.
+export const MAP = {
+  green: [15.2, 15.7], frost: [40.8, 18.6], rust: [65.5, 10.0], rings: [84.5, 27.2],
+  ice: [24.8, 31.5], moon: [60.5, 30.5], home: [42.0, 43.4], rock: [84.0, 46.8],
+  lava: [11.5, 50.6], marble: [58.5, 52.0], wreck: [31.0, 66.8], crater: [77.0, 70.1],
+  earth: [8.5, 81.1], sand: [56.0, 81.6],
+};
+
 // 25 routes. A route is either colourless or carries one colour for its whole length,
 // marked by a coloured dot where it leaves each planet (red is printed pink on the board).
 // Every planet has exactly one red, one green and one yellow route; planets with four or

@@ -620,6 +620,37 @@ function missionHtml(s, id, extra = '') {
 // ---------- the board, as a list ----------
 // A map is unreadable at phone width, so the board is a list: the routes you can actually
 // take first, then everything else, nearest first.
+// The board photo with the live game drawn on it: a marker per planet showing its mission,
+// its tile, a station and any ships. Routes aren't marked - they curve too much for a
+// straight-line midpoint to be honest - so pirates stay in the list below.
+function mapHtml(s, p) {
+  const pins = Object.entries(D.MAP).map(([id, [x, y]]) => {
+    const chips = [];
+    const mission = s.missions[id];
+    const tile = s.tiles[id];
+    const station = Object.entries(s.stations).find(([, st]) => st.at === id && st.out);
+    if (mission) {
+      const m = missionDef(mission);
+      chips.push(`<button class="chip mi" data-img="img/missions/${mission}.webp" title="${esc(m.name)} \u2014 ${m.pts} points">${m.pts}</button>`);
+    }
+    if (tile) {
+      chips.push(`<button class="chip ti${tile.up ? '' : ' dn'}" data-img="img/tiles/${tile.up ? 'up' : 'dn'}${tile.n}.webp" title="Tile ${tile.n}${tile.up ? '' : ', face down'}">${tile.n}</button>`);
+    }
+    if (station) {
+      const def = D.STATION_TILES.find((t) => t.id === station[0]);
+      chips.push(`<button class="chip st ${def.id}" data-img="img/tiles/st_${def.id}.webp" title="${esc(def.name)}: ${esc(fxText(def.fx))}">\u2b22</button>`);
+    }
+    for (const q of s.players.filter((q) => q.at === id)) {
+      chips.push(`<span class="chip sh${q === p ? ' me' : ''}" title="${esc(q.name)}">\u{1F680}</span>`);
+    }
+    return chips.length ? `<div class="pin" style="left:${x}%;top:${y}%">${chips.join('')}</div>` : '';
+  }).join('');
+  return `<details ${keepOpen('map')}><summary>Board picture</summary>
+    <div class="galaxy"><img src="img/board.webp" alt="The galaxy">${pins}</div>
+    <p class="muted">Tap a marker for the card. Pirates are listed below, not drawn \u2014 the routes curve too much to mark reliably.</p>
+  </details>`;
+}
+
 // What sits on a planet, as tags with a picture button each. Used by both board tables, so
 // a planet with nothing on it says so rather than just showing a blank cell.
 const TILE_NOTE = 'Numbered tiles are the countdown to the pirate uprising. '
@@ -652,29 +683,23 @@ function spotHtml(s, id) {
 function boardHtml(s, p, myTurn) {
   const dist = bfs(p.at);
   const here = routesAt(p.at);
-  const rows = (ids) => ids.map((id) =>
-    `<tr><td>${esc(locName(id))}</td><td class="muted">${dist[id] ?? '–'}</td>
-      <td>${spotHtml(s, id).join(' ')}</td></tr>`).join('');
-
-  const far = D.LOCS.map((l) => l.id).filter((id) => id !== p.at && !neighbours(p.at).includes(id))
-    .sort((a, b) => (dist[a] ?? 99) - (dist[b] ?? 99));
-
+  // One table, nearest first: the Jumps column already says how far, so splitting the
+  // neighbours into their own table only made the same planets appear twice.
+  const all = D.LOCS.map((l) => l.id).sort((a, b) => (dist[a] ?? 99) - (dist[b] ?? 99));
   return `<div class="here"><b>Your ship is at ${esc(locName(p.at))}</b>
       ${s.missions[p.at] ? '' : '<span class="muted"> — no mission here</span>'}</div>
-    <table class="board"><thead><tr><th>Routes from here</th><th></th><th></th></tr></thead><tbody>
-      ${here.map((i) => {
-        const to = routeEnd(i, p.at);
-        const col = D.ROUTES[i].c;
-        return `<tr><td>${esc(locName(to))}</td>
-          <td class="muted">${col ? `<span class="dot dot-${col}"></span>` : ''}</td>
-          <td>${s.pirates[i] ? `<span class="tag pir">${esc(pirate(s.pirates[i]))}</span> ` : ''}${spotHtml(s, to).join(' ')}</td></tr>`;
+    ${mapHtml(s, p)}
+    <table class="board"><thead><tr><th>Planet</th><th>Jumps</th><th></th></tr></thead><tbody>
+      ${all.map((id) => {
+        const i = here.find((j) => routeEnd(j, p.at) === id);
+        const col = i === undefined ? null : D.ROUTES[i].c;
+        return `<tr${id === p.at ? ' class="at"' : ''}><td>${esc(locName(id))}</td>
+          <td class="muted">${dist[id] ?? '–'}${col ? ` <span class="dot dot-${col}"></span>` : ''}</td>
+          <td>${i !== undefined && s.pirates[i] ? `<span class="tag pir">${esc(pirate(s.pirates[i]))}</span> ` : ''}${spotHtml(s, id).join(' ')}</td></tr>`;
       }).join('')}
     </tbody></table>
     ${missionsHtml(s)}
     ${piratesHtml(s)}
-    <details ${keepOpen('galaxy')}><summary>The rest of the galaxy</summary>
-      <table class="board"><thead><tr><th>Planet</th><th>Jumps</th><th></th></tr></thead>
-      <tbody>${rows(far)}</tbody></table></details>
     <p class="muted">${TILE_NOTE}</p>
     ${myTurn && !ask(s) && !s.turn.acted ? missionHereHtml(s, p) : ''}`;
 }

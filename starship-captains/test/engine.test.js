@@ -1029,3 +1029,12 @@ test('every card the UI offers a picture for has one on disk', () => {
     assert.ok(has(`events/${e.id}`), `event crop ${e.id}`);
   }
 });
+
+test('the board picture has a spot for every planet and no stray ones', () => {
+  const locs = D.LOCS.map((l) => l.id).sort();
+  assert.deepEqual(Object.keys(D.MAP).sort(), locs, 'MAP covers exactly the planets');
+  for (const [id, xy] of Object.entries(D.MAP)) {
+    assert.equal(xy.length, 2, `${id} has an x and a y`);
+    for (const n of xy) assert.ok(n > 0 && n < 100, `${id} sits inside the picture`);
+  }
+});

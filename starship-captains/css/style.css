@@ -178,3 +178,28 @@ table.ship td { padding: 3px 6px; }
 .jic { min-width: 16px; text-align: center; }
 .slotnote { font-size: 12px; padding: 3px 0; border-bottom: 1px solid var(--line); }
 .missionrow { border-bottom: 1px solid var(--line); padding: 6px 0; }
+
+/* The board photo with live markers on it (mapHtml in ui.js). Coordinates in data.js are
+   percentages, so the overlay scales with the picture at any width. */
+.galaxy { position: relative; margin: 6px 0; }
+.galaxy img { width: 100%; display: block; border-radius: 6px; }
+.pin {
+  position: absolute; transform: translate(-50%, -50%);
+  display: flex; gap: 2px; padding: 2px;
+  background: rgba(0, 0, 0, .72); border-radius: 8px;
+}
+.chip {
+  font: 600 12px/1 system-ui, sans-serif; color: #fff; min-width: 18px; height: 18px;
+  padding: 0 4px; border: 1px solid rgba(255, 255, 255, .5); border-radius: 5px;
+  background: #444; display: inline-flex; align-items: center; justify-content: center;
+}
+button.chip { cursor: pointer; }
+.chip.mi { background: #1d6fb8; }          /* a mission, labelled with its points */
+.chip.ti { background: #c2410c; }          /* a numbered tile, face up */
+.chip.ti.dn { background: #1e293b; }       /* the same tile, face down */
+.chip.st.gold { background: #b8860b; }
+.chip.st.blue { background: #2a7fa8; }
+.chip.st.home { background: #6b3fa0; }
+.chip.sh { background: transparent; border: none; font-size: 13px; }
+.chip.sh.me { text-shadow: 0 0 4px #fff, 0 0 2px #fff; }
+tr.at > td { background: rgba(240, 180, 41, .12); }

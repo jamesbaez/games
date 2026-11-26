@@ -1121,3 +1121,20 @@ test('the only card that fights safely is the one printed that way', () => {
   const safe = D.TECHS.filter((t) => JSON.stringify(t).includes('fightSafe')).map((t) => t.id);
   assert.deepEqual(safe, ['turbo_lasers']);
 });
+
+test('a track remembers which event it had after the event happens', () => {
+  const s = newGame();
+  const t = D.FACTIONS.findIndex((f) => f.id === 'nian');
+  const had = s.tracks[t].event;
+  assert.ok(had, 'the track starts with an event');
+
+  const g = structuredClone(s);
+  g.players[g.current].marks[t].sp = D.EVENT_SPACE - 1;
+  g.pending = [{ k: 'fx', fx: [['nian', 1]], i: 0 }];
+  let out = pump(g) ?? g;
+  while (ask(out)) out = apply(out, { p: out.current, type: 'choose', opt: pick(out) });
+
+  assert.equal(out.tracks[t].event, null, 'it cannot fire a second time');
+  assert.equal(out.tracks[t].fired, had, 'but we still know which card it was');
+  assert.equal(out.eventsDone, 1);
+});

@@ -678,15 +678,26 @@ function stepTrack(s, p, t, noBonus = false) {
   if (bonus) push(s, { k: 'fx', fx: bonus, i: 0 });
 }
 
+// `event` is cleared once an event has happened, so a second marker reaching the space
+// can't fire it again. `fired` and `gone` remember which card it was, purely so the UI can
+// still show it: fired = it resolved, gone = it was removed unresolved once the game hit
+// its two-event limit. They are extra fields, never read by the rules, so a device running
+// older code ignores them and behaves exactly as before - no save-version bump needed.
 function fireEvent(s, t) {
   if (s.eventsDone >= D.EVENT_LIMIT || !s.tracks[t].event) return;
   const ev = s.tracks[t].event;
   s.tracks[t].event = null;
+  s.tracks[t].fired = ev;
   s.eventsDone++;
   const def = D.eventDef(ev);
   log(s, `Event: ${def.name}. ${def.text}`);
   resolveEvent(s, def);
-  if (s.eventsDone >= D.EVENT_LIMIT) for (const tr of s.tracks) tr.event = null;
+  if (s.eventsDone >= D.EVENT_LIMIT) {
+    for (const tr of s.tracks) {
+      if (tr.event) tr.gone = tr.event;
+      tr.event = null;
+    }
+  }
 }
 
 // Each event card is a named `special` with one branch here. Events are global, so they

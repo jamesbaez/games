@@ -234,3 +234,12 @@ tr.at > td { background: rgba(240, 180, 41, .12); }
 .tstrip .z2 { background: rgba(255, 255, 255, .06); }
 .tstrip .z3 { background: rgba(255, 255, 255, .09); }
 .tstrip .z4 { background: rgba(255, 255, 255, .13); }
+
+/* An event that has already happened, still listed on its track. */
+.done { color: var(--good); }
+
+/* A station whose tile is used this round, and a bounty an event left on a station. */
+.tag.used { opacity: .65; }
+.chip.st.used { opacity: .5; }
+.tag.bounty { background: #7f1d1d; color: #fff; }
+.chip.bounty { background: #7f1d1d; }

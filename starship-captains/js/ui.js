@@ -629,7 +629,7 @@ function mapHtml(s, p) {
     const chips = [];
     const mission = s.missions[id];
     const tile = s.tiles[id];
-    const station = Object.entries(s.stations).find(([, st]) => st.at === id && st.out);
+
     if (mission) {
       const m = missionDef(mission);
       chips.push(`<button class="chip mi" data-img="img/missions/${mission}.webp" title="${esc(m.name)} \u2014 ${m.pts} points">${m.pts}</button>`);
@@ -637,9 +637,11 @@ function mapHtml(s, p) {
     if (tile) {
       chips.push(`<button class="chip ti${tile.up ? '' : ' dn'}" data-img="img/tiles/${tile.up ? 'up' : 'dn'}${tile.n}.webp" title="Tile ${tile.n}${tile.up ? '' : ', face down'}">${tile.n}</button>`);
     }
-    if (station) {
-      const def = D.STATION_TILES.find((t) => t.id === station[0]);
-      chips.push(`<button class="chip st ${def.id}" data-img="img/tiles/st_${def.id}.webp" title="${esc(def.name)}: ${esc(fxText(def.fx))}">\u2b22</button>`);
+    for (const [sid, st] of stationsAt(s, id)) {
+      const def = D.STATION_TILES.find((t) => t.id === sid);
+      chips.push(`<button class="chip st ${def.id}${st.out ? '' : ' used'}" data-img="img/tiles/st_${def.id}.webp"
+        title="${esc(def.name)}${st.out ? `: ${esc(fxText(def.fx))}` : ' \u2014 tile used, back next round'}">\u2b22</button>`);
+      if (st.bounty) chips.push(`<span class="chip bounty" title="${esc(BOUNTY[st.bounty].help)}">${BOUNTY[st.bounty].chip}</span>`);
     }
     for (const q of s.players.filter((q) => q.at === id)) {
       chips.push(`<span class="chip sh${q === p ? ' me' : ''}" title="${esc(q.name)}">\u{1F680}\u202f${esc(q.name)}</span>`);
@@ -652,6 +654,14 @@ function mapHtml(s, p) {
   </details>`;
 }
 
+// Every station on a planet, tile out or not. An event can leave a bounty on a station,
+// and that bounty pays the next player to END a turn there regardless of the tile.
+const stationsAt = (s, id) => Object.entries(s.stations).filter(([, st]) => st.at === id);
+const BOUNTY = {
+  medal: { tag: '\u{1F396} medal waiting', chip: '\u{1F396}', help: 'An event left a medal here. End your turn on this planet to take it.' },
+  damageAndTrack: { tag: '\u{1F4A5} charge waiting', chip: '\u{1F4A5}', help: 'An event left a charge here. End your turn on this planet and you take the damage, then advance 1 on a track of your choice.' },
+};
+
 // What sits on a planet, as tags with a picture button each. Used by both board tables, so
 // a planet with nothing on it says so rather than just showing a blank cell.
 const TILE_NOTE = 'Numbered tiles are the countdown to the pirate uprising. '
@@ -663,7 +673,6 @@ function spotHtml(s, id) {
   const bits = [];
   const mission = s.missions[id];
   const tile = s.tiles[id];
-  const station = Object.entries(s.stations).find(([, st]) => st.at === id && st.out);
   bits.push(mission
     ? `<span class="mtag">${missionLabel(mission)}</span> ${pic('missions/' + mission)}`
     : '<span class="muted">no mission</span>');
@@ -671,11 +680,14 @@ function spotHtml(s, id) {
     bits.push(`<span class="tag" title="${esc(TILE_NOTE)}">Tile ${tile.n}${tile.up ? '' : ' (face down)'}</span>`
       + ` ${pic('tiles/' + (tile.up ? 'up' : 'dn') + tile.n)}`);
   }
-  if (station) {
-    const def = D.STATION_TILES.find((t) => t.id === station[0]);
-    const gives = fxText(def.fx) + (station[1].bounty ? ', plus the event bounty' : '');
-    bits.push(`<span class="tag" title="End your turn here to get: ${esc(gives)}">${esc(def.name)}: ${esc(gives)}</span>`
-      + ` ${pic('tiles/st_' + def.id)}`);
+  // A station is listed whether or not its tile is out: an event's bounty sits on the
+  // station itself and still pays whoever ends a turn there, used tile or not.
+  for (const [sid, st] of stationsAt(s, id)) {
+    const def = D.STATION_TILES.find((t) => t.id === sid);
+    bits.push(st.out
+      ? `<span class="tag" title="End your turn here to get: ${esc(fxText(def.fx))}">${esc(def.name)}: ${esc(fxText(def.fx))}</span> ${pic('tiles/st_' + def.id)}`
+      : `<span class="tag used">${esc(def.name)} <span class="muted">\u2014 tile used, back next round</span></span>`);
+    if (st.bounty) bits.push(`<span class="tag bounty" title="${esc(BOUNTY[st.bounty].help)}">${BOUNTY[st.bounty].tag}</span>`);
   }
   for (const q of s.players.filter((q) => q.at === id)) bits.push(`<span class="tag">🚀 ${esc(q.name)}</span>`);
   return bits;
@@ -942,6 +954,21 @@ const glyphFor = (fx) => fx.map((tok) => {
   return n > 1 ? `${g}\u00d7${n}` : g;
 }).join(' ');
 
+// The event on a track, still shown once it has happened: knowing what hit you is worth
+// more than a tidy row. s.tracks[t] keeps `fired` (it resolved) and `gone` (removed
+// unresolved at the two-event limit) alongside `event` (still waiting).
+function eventLineHtml(s, t) {
+  const tr = s.tracks[t];
+  const id = tr.event ?? tr.fired ?? tr.gone;
+  if (!id) return `<div class="muted">Event space ${D.EVENT_SPACE}: <i>none</i></div>`;
+  const ev = D.eventDef(id);
+  const mark = tr.event ? '' : tr.fired
+    ? ' <span class="done">\u2713 resolved</span>'
+    : ' <span class="muted">\u2014 removed unresolved (two events had already happened)</span>';
+  return `<div class="muted">Event space ${D.EVENT_SPACE}: ${esc(ev.name)}${eventPic(s, t, ev)}${mark}</div>
+    <div class="muted">${esc(ev.text)}</div>`;
+}
+
 function trackStripHtml(s, t, side, me) {
   const sp = [...Array(D.TRACK_LEN).keys()];
   const head = sp.map((i) => `<th class="z${D.TRACK_ZONE_PTS[i]}${i === D.EVENT_SPACE ? ' ev' : ''}">${i}${i === D.EVENT_SPACE ? '\u26a1' : ''}</th>`).join('');
@@ -965,12 +992,10 @@ function trackStripHtml(s, t, side, me) {
 function tracksHtml(s, me) {
   return D.FACTIONS.map((fa, t) => {
     const side = fa.sides.find((x) => x.id === s.tracks[t].side);
-    const ev = s.tracks[t].event && D.eventDef(s.tracks[t].event);
     return `<div class="track">
       <b>${esc(fa.name)}</b> <span class="muted">(side ${esc(side.id.slice(-1))})</span> ${pic('tracks/' + side.id)}
       ${trackStripHtml(s, t, side, me)}
-      <div class="muted">Event space ${D.EVENT_SPACE}: ${ev ? esc(ev.name) : '<i>already resolved</i>'}${ev ? eventPic(s, t, ev) : ''}</div>
-      ${ev ? `<div class="muted">${esc(ev.text)}</div>` : ''}</div>`;
+      ${eventLineHtml(s, t)}</div>`;
   }).join('');
 }
 

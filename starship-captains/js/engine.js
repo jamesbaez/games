@@ -430,11 +430,13 @@ function missionStep(s, f) {
       f.i++;
       return;
     }
-    // A matching line may still be refused outright, which only matters when it costs
-    // something involuntary. Lines that can only help resolve without asking.
-    if (lineCanHurt(line)) { f.phase = 'offer'; askFor(s, 'line', { line: f.i }); return; }
-    f.phase = 'first';
-    push(s, { k: 'fx', fx: line.fx, i: 0 });
+    // Every matching line is offered, never resolved automatically. Rulebook p. 13: "If the
+    // figure is an ensign matching the color of the line, you MAY perform all depicted
+    // effects... or if there is an effect you want to avoid, ignore the entire line." Even
+    // a line that looks like pure profit can be unwanted - advancing a track past an event
+    // space, or drawing artifacts you have no room for.
+    f.phase = 'offer';
+    askFor(s, 'line', { line: f.i });
     return;
   }
   if (f.phase === 'first') {
@@ -465,17 +467,6 @@ function missionHad(m, keys) {
 
 // Whether a line contains anything a player might not want. Costs inside `pay` and the
 // branches of `either` are already choices, so only unconditional harm counts.
-function lineCanHurt(line) {
-  const seen = [];
-  const walk = (fx) => {
-    for (const tok of fx ?? []) {
-      if (Array.isArray(tok) || typeof tok === 'string') { seen.push(tokName(tok)); continue; }
-      if (tok && tok.then) walk(tok.then);
-    }
-  };
-  walk(line.fx);
-  return seen.some((k) => k === 'damage' || k === 'ambush');
-}
 
 const figName = (f) => (f === D.ANDROID ? 'the android'
   : f === D.CADET ? 'the cadet'

@@ -56,10 +56,18 @@ came from. When tile 1 is turned face down, the **pirate uprising** fires.
 These are the places the rules are silent, ambiguous, or impractical on a phone. Each one
 is a deliberate choice, not an oversight.
 
-### Mission lines are offered only when they can hurt
-The rules let you refuse **any** line. This engine resolves a line automatically when it
-can only help, and asks "resolve / skip" only when the line contains damage or an ambush.
-Otherwise you would tap through a confirmation for every line of every mission.
+### Every mission line is offered
+Rulebook p. 13, step 3: "If the figure is an ensign matching the color of the line, you
+**may** perform all depicted effects, left to right... If the figure does not match, or if
+there is an effect you want to avoid, **ignore the entire line**." So a matching line is
+always offered as resolve / skip, never resolved automatically, and it is all-or-nothing -
+you cannot take part of a line.
+
+This engine used to ask only when a line carried damage or an ambush, to save taps. That
+was wrong: a line that looks like pure profit can still be unwanted, for instance when
+advancing a track would carry your marker onto the event space, or when drawing artifacts
+would force you to jettison something. The question names the line and flags what on it
+can hurt.
 
 ### Events resolve themselves for the other player
 Events hit everyone, but the pending machine only ever asks the player whose turn it is.

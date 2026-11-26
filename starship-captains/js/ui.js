@@ -397,10 +397,17 @@ function askHtml(s, p) {
     peekMissions: () => `<p>Choose which mission comes up next:</p>
       ${f.pool.map((id) => choose(missionLabel(id), id)).join('')}`,
     line: () => {
-      const m = missionDef(ask(s).id ?? assigningId(s));
+      const mf = missionFrame(s);
+      const m = mf && missionDef(mf.id);
       const line = m?.lines[f.line];
-      return `<p>Resolve this line? It costs you something.</p>
-        <p class="muted">${line ? esc(lineText(line)) : ''}</p>
+      const fig = mf?.crew?.[f.line];
+      return `<p><b>${m ? esc(m.name) : 'This mission'}</b>${m ? ` ${pic('missions/' + mf.id)}` : ''}
+          \u2014 line ${f.line + 1} of ${m ? m.lines.length : '?'}${fig ? `, assigned ${figName(fig)}` : ''}</p>
+        <p>${line ? esc(lineText(line)) : ''}</p>
+        <p class="muted">${line && lineCost(line)
+          ? `Careful: ${esc(lineCost(line))}.`
+          : 'Nothing here can hurt you, but every line is optional.'}
+          Skipping resolves nothing from this line \u2014 the mission still completes and still scores.</p>
         ${choose('Resolve it', 'take')} ${choose('Skip the line', 'skip', { cls: 'secondary' })}`;
     },
     second: () => secondAskHtml(s, p, f),
@@ -420,7 +427,7 @@ function askHtml(s, p) {
 const ASK_TITLE = {
   move: 'Move where?', jump: 'Jump where?', fight: 'Fight a pirate?', repair: 'Repair what?',
   bump: 'Make room', stow: 'No room aboard', track: 'Which faction track?',
-  tech: 'Research a tech', peekMissions: 'Choose the next mission', line: 'Mission line',
+  tech: 'Research a tech', peekMissions: 'Choose the next mission', line: 'Resolve this line?',
   second: "Commander's second task", branch: 'Choose one', pay: 'Spend something?',
   takeArt: 'An artifact was left here', freeTrain: 'Free training',
 };
@@ -442,7 +449,9 @@ const REWARD = { android: '\ud83e\udd16 android', medalArt: '\ud83c\udf96+\u2b22
 const pirate = (tok) => (tok ? `\u2620 ${tok.c} (${REWARD[tok.reward] ?? tok.reward})` : '');
 
 const tokenName = (c) => (c?.t === 'art' ? `Artifact ${ART[c.id] ?? ''}` : c?.t === 'pir' ? 'Pirate token ☠' : 'Damage');
-const assigningId = () => null;
+// The mission being resolved sits in a {k:'mission'} frame under whatever question is on
+// top of the stack, so that is where a question finds out which card it belongs to.
+const missionFrame = (s) => [...(s.pending ?? [])].reverse().find((f) => f.k === 'mission') ?? null;
 
 function techAskHtml(s, p, f) {
   const cards = techChoices(s, f);
@@ -603,6 +612,25 @@ function fxText(fx) {
     if (EFFECT_N[tok]) return EFFECT_N[tok](1);
     return EFFECT[tok] ?? tok;
   }).filter(Boolean).join(', ');
+}
+
+// What makes a line refusable, named so the question doesn't just say "it costs you
+// something". Mirrors lineCanHurt in engine.js: damage and ambushes are the involuntary
+// parts, everything else on a line can only help.
+function lineCost(line) {
+  const bad = [];
+  const walk = (fx) => {
+    for (const tok of fx ?? []) {
+      if (tok && !Array.isArray(tok) && typeof tok === 'object') { walk(tok.then); continue; }
+      const [k, n] = Array.isArray(tok) ? tok : [tok, 1];
+      if (k === 'damage') bad.push(`${n} damage`);
+      if (k === 'ambush') bad.push('a pirate appears');
+    }
+  };
+  walk(line.fx);
+  const counted = {};
+  for (const b of bad) counted[b] = (counted[b] ?? 0) + 1;
+  return Object.entries(counted).map(([b, n]) => (n > 1 ? `${b} \u00d7${n}` : b)).join(', ');
 }
 
 const lineText = (line) => `${COLOR_NAME[line.c] ?? line.c}: ${fxText(line.fx)}`;

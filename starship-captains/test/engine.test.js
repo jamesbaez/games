@@ -1138,3 +1138,24 @@ test('a track remembers which event it had after the event happens', () => {
   assert.equal(out.tracks[t].fired, had, 'but we still know which card it was');
   assert.equal(out.eventsDone, 1);
 });
+
+test('every matching mission line is offered, even a harmless one', () => {
+  // Rulebook p. 13: "you MAY perform all depicted effects ... or if there is an effect you
+  // want to avoid, ignore the entire line." Urgent Repair's only line is pure profit and
+  // must still be offered, because declining can matter (a track you don't want to move).
+  const m = D.missionDef('urgent_repair');
+  assert.deepEqual(m.lines.map((l) => l.c), ['b']);
+  const { s, p } = atMission('urgent_repair', ['b']);
+  const g = act(s, { type: 'mission', assign: ['b'] });
+  assert.equal(ask(g)?.q, 'line', 'the line is offered rather than resolved');
+  assert.equal(ask(g).line, 0);
+
+  const drain = (x) => { while (ask(x)) x = apply(x, { p: x.current, type: 'choose', opt: pick(x) }); return x; };
+  const took = drain(act(g, { type: 'choose', opt: 'take' }));
+  const left = drain(act(g, { type: 'choose', opt: 'skip' }));
+  assert.ok(left.players[0].done.includes('urgent_repair'), 'skipping still completes it');
+  assert.ok(took.players[0].done.includes('urgent_repair'));
+  // Taking it repairs; skipping it does not.
+  assert.ok(damageCount(took.players[0]) < damageCount(left.players[0]), 'the repair only happens if taken');
+  assert.ok(p, 'sanity');
+});

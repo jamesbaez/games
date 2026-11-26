@@ -5,7 +5,7 @@ import {
   setup, apply, ask, score, winners, neighbours, routesAt, routeEnd, reservedBy,
   damageCount, cargoTokens, canActivate, roomsFor, techChoices, techSlotChoices,
   bonusesFor, techDef, sharedTech, abilities, trainCost, promoteCost, medalsAvailable,
-  locDef, undoable, GameError,
+  countIconPairs, locDef, undoable, GameError,
 } from './engine.js';
 import * as D from './data.js';
 import { onlineReady, createRoom, getRoom, writeRoom, watchRoom, postChat, markSeen, notify, alertTopic, packSave, unpackSave } from './net.js';
@@ -462,6 +462,45 @@ function techAskHtml(s, p, f) {
   ${choose('Research nothing', 'skip', { cls: 'secondary' })}`;
 }
 
+// Your tech-slot board, drawn as the physical board reads: each slot between its two
+// edges, with the junctions between slots showing which icons line up. A matching pair
+// is what pays out when a card goes in, and what the omega Starship Schematics scores,
+// so you need to see it before choosing a slot - not after.
+const ICON = { rep: '\ud83d\udd27', med: '\ud83c\udf96', mov: '\u27a1\ufe0f' };
+const edgeIcons = (list) => (list.length ? list.map((ic) => `<span class="ic">${ICON[ic]}</span>`).join('') : '<span class="ic none">·</span>');
+
+function techSlotsHtml(s, p, mine) {
+  // The icons on a slot's edge: the card's if one is installed, else the board's own.
+  const side = (i, k) => {
+    const t = p.techSlots[i].tech;
+    return (t ? techDef(t) : D.SLOT_BOARD[i])[k] ?? [];
+  };
+  const rows = p.techSlots.map((sl, i) => {
+    const d = sl.tech && techDef(sl.tech);
+    const body = d
+      ? `<b>${esc(d.name)}</b> ${pic('techs/' + sl.tech)}${sl.art ? ' <span class="tag">⬢ artifact</span>' : ''}
+         ${d.text ? `<div class="muted">${esc(d.text)}</div>` : ''}
+         ${d.room ? `<div class="tag room-${d.room}">Room: ${esc(fxText(d.fx))}</div>` : ''}`
+      : `<span class="muted">${sl.dmg ? 'damaged — repair before using' : 'empty'}</span>`;
+    const match = i < p.techSlots.length - 1
+      ? D.BONUS_ICONS.filter((ic) => side(i, 'R').includes(ic) && side(i + 1, 'L').includes(ic)) : [];
+    const join = i < p.techSlots.length - 1
+      ? `<div class="junction${match.length ? ' live' : ''}">${match.length
+          ? `${match.map((ic) => ICON[ic]).join(' ')} <span class="muted">pays ${match.map(bonusName).join(' + ')}</span>`
+          : '<span class="muted">no match</span>'}</div>`
+      : '';
+    return `<div class="slotrow${sl.dmg ? ' dmg' : ''}">
+        <div class="edge">${edgeIcons(side(i, 'L'))}</div>
+        <div class="tslot"><div class="muted">Slot ${i + 1}${sl.dmg ? ' 💥' : ''}</div>${body}</div>
+        <div class="edge">${edgeIcons(side(i, 'R'))}</div>
+      </div>${join}`;
+  }).join('');
+  const pairs = countIconPairs(p);
+  return `<div class="slotboard">${rows}</div>
+    ${mine ? `<p class="muted">${pairs} matching pair${pairs === 1 ? '' : 's'} on the board.
+      A pair pays out when a card goes in, and scores if you hold Starship Schematics.</p>` : ''}`;
+}
+
 const bonusName = (ic) => ({ rep: '🔧 repair', med: '🎖 medal', mov: '➡️ move' }[ic] ?? ic);
 
 function secondAskHtml(s, p, f) {
@@ -499,16 +538,32 @@ function payAskHtml(s, p, f) {
 }
 
 // ---------- describing effects ----------
+// Effects in plain English. The ones that take a number read better with it folded into
+// the sentence ("advance 2 on the Tincan track") than tacked on as a multiplier.
+const EFFECT_N = {
+  coop: (n) => `advance ${n} on the Cooperative track`,
+  tincan: (n) => `advance ${n} on the Tincan track`,
+  nian: (n) => `advance ${n} on the Ni'an track`,
+  anyTrack: (n) => `advance ${n} on any track`,
+  anyTrackNB: (n) => `advance ${n} on any track, gaining no bonuses`,
+  repair: (n) => `repair ${n}`,
+  damage: (n) => `take ${n} damage`,
+  medal: (n) => `gain ${n} medal${n > 1 ? 's' : ''}`,
+  artifact: (n) => `draw ${n} artifact${n > 1 ? 's' : ''}`,
+  pirateTok: (n) => `take ${n} pirate token${n > 1 ? 's' : ''}`,
+  fight: (n) => (n > 1 ? `fight ${n} pirates` : 'fight a pirate'),
+};
+
 const EFFECT = {
-  move: 'move', jump: 'jump', fight: 'fight a pirate', fightSafe: 'fight a pirate, ignoring the damage',
-  repair: 'repair', damage: 'take damage', medal: 'gain a medal', artifact: 'draw an artifact',
-  pirateTok: 'take a pirate token', android: 'gain an android', cadet: 'gain a cadet',
+  move: 'move', jump: 'jump', fightSafe: 'fight a pirate, ignoring the damage',
+  android: 'gain an android', cadet: 'gain a cadet',
   queue: 'call the front of your queue to the ready room', ambush: 'a pirate appears',
-  coop: 'advance on the Cooperative track', tincan: 'advance on the Tincan track',
-  nian: "advance on the Ni'an track", anyTrack: 'advance on any track',
-  anyTrack1x2: 'advance 1 on any track, twice', tech: 'research a tech', techR: 'research or recycle a tech',
+  anyTrack1x2: 'advance 1 on any track, twice',
+  tech: 'research a tech', techR: 'research or recycle a tech',
+  techNB: 'research a tech, but gain no tech bonuses',
   drawTech3: 'draw 3 techs and research one', drawOmega3: 'draw 3 omega techs and research one',
-  peekMissions3: 'look at the top 3 missions', trackPerAndroid: 'advance 1 on any track per android',
+  peekMissions3: 'look at the top 3 missions', trackPerAndroid: 'advance 1 on any track per android in your crew',
+  ignoreMissionDamage: 'ignore all damage on this mission',
   freeTrain: 'train a crew member for free', event: '', ignoreDamage1: 'ignore 1 damage',
 };
 
@@ -517,8 +572,9 @@ function fxText(fx) {
   return fx.map((tok) => {
     if (Array.isArray(tok)) {
       const [k, n] = tok;
+      if (EFFECT_N[k]) return EFFECT_N[k](n ?? 1);
       const base = EFFECT[k] ?? k;
-      return n > 1 ? `${base} ×${n}` : base;
+      return n > 1 ? `${base} \u00d7${n}` : base;
     }
     if (typeof tok === 'object') {
       if (tok.either) return tok.either.map((b) => fxText(b)).join(' OR ');
@@ -528,6 +584,7 @@ function fxText(fx) {
       }
       return '?';
     }
+    if (EFFECT_N[tok]) return EFFECT_N[tok](1);
     return EFFECT[tok] ?? tok;
   }).filter(Boolean).join(', ');
 }
@@ -557,7 +614,7 @@ function boardHtml(s, p, myTurn) {
     const tile = s.tiles[id];
     const station = Object.entries(s.stations).find(([, st]) => st.at === id && st.out);
     const bits = [];
-    if (mission) bits.push(`<span class="mtag">${missionLabel(mission)}</span>`);
+    if (mission) bits.push(`<span class="mtag">${missionLabel(mission)}</span> ${pic('missions/' + mission)}`);
     if (tile) bits.push(`<span class="tag">Tile ${tile.n}${tile.up ? '' : ' (face down)'}</span>`);
     if (station) bits.push(`<span class="tag">${esc(D.STATION_TILES.find((t) => t.id === station[0]).name)}</span>`);
     if (who) bits.push(`<span class="tag">🚀 ${who}</span>`);
@@ -576,10 +633,11 @@ function boardHtml(s, p, myTurn) {
         return `<tr><td>${esc(locName(to))}</td>
           <td class="muted">${col ? `<span class="dot dot-${col}"></span>` : ''}</td>
           <td>${s.pirates[i] ? `<span class="tag pir">${esc(pirate(s.pirates[i]))}</span>` : ''}
-            ${s.missions[to] ? `<span class="mtag">${missionLabel(s.missions[to])}</span>` : ''}
+            ${s.missions[to] ? `<span class="mtag">${missionLabel(s.missions[to])}</span> ${pic('missions/' + s.missions[to])}` : ''}
             ${s.players.filter((q) => q.at === to).map((q) => `<span class="tag">🚀 ${esc(q.name)}</span>`).join('')}</td></tr>`;
       }).join('')}
     </tbody></table>
+    ${missionsHtml(s)}
     ${piratesHtml(s)}
     <details ${keepOpen('galaxy')}><summary>The rest of the galaxy</summary>
       <table class="board"><thead><tr><th>Planet</th><th>Jumps</th><th></th></tr></thead>
@@ -605,6 +663,29 @@ function piratesHtml(s) {
   if (!rows) return '<div class="muted">No pirates on the board.</div>';
   return `<details ${keepOpen('pirates')}><summary>Pirates (${s.pirates.filter(Boolean).length})</summary>
     <table class="board"><tbody>${rows}</tbody></table></details>`;
+}
+
+// Every face-up mission on the board, nearest first: the full text of each line, a
+// picture button, and how far away it is. A mission's name alone doesn't tell you
+// whether it is worth flying across the galaxy for.
+function missionsHtml(s) {
+  const p = s.players[s.current];
+  const dist = bfs(p.at);
+  const rows = Object.entries(s.missions)
+    .map(([loc, id]) => ({ loc, id, d: dist[loc] ?? 99 }))
+    .sort((a, b) => a.d - b.d)
+    .map(({ loc, id, d }) => {
+      const owner = reservedBy(s, loc);
+      const where = loc === p.at ? '<span class="tag">you are here</span>'
+        : `<span class="muted">${d} jump${d === 1 ? '' : 's'}</span>`;
+      const held = owner !== null && owner !== p.idx
+        ? `<span class="tag">reserved for ${esc(s.players[owner].name)}</span>` : '';
+      return `<div class="missionrow">
+        <div><b>${esc(locName(loc))}</b> ${where} ${held}</div>
+        ${missionHtml(s, id)}</div>`;
+    }).join('');
+  return `<details ${keepOpen('missions')}><summary>Missions on the board (${Object.keys(s.missions).length})</summary>
+    ${rows || '<div class="muted">None face up.</div>'}</details>`;
 }
 
 function bfs(from) {
@@ -666,13 +747,7 @@ function shipHtml(s, p, mine) {
     <tr><th>Rooms</th><td>${rooms.map((r) => `<span class="tag room-${r.color}">${esc(r.name)}</span>`).join(' ')}
       ${Object.keys(p.roomDmg).length ? `<div class="muted">Out of action: ${Object.keys(p.roomDmg).map((id) => esc(D.ROOMS.find((x) => x.id === id).name)).join(', ')}</div>` : ''}</td></tr>
   </table>
-  <div class="slots">${p.techSlots.map((sl, i) => {
-    const d = sl.tech && techDef(sl.tech);
-    return `<div class="tslot${sl.dmg ? ' dmg' : ''}">
-      <div class="muted">Slot ${i + 1}${sl.dmg ? ' 💥' : ''}</div>
-      ${d ? `<b>${esc(d.name)}</b> ${pic('techs/' + sl.tech)}${sl.art ? ' <span class="tag">⬢ artifact</span>' : ''}
-        ${d.text ? `<div class="muted">${esc(d.text)}</div>` : ''}` : '<div class="muted">empty</div>'}</div>`;
-  }).join('')}</div>`;
+  ${techSlotsHtml(s, p, mine)}`;
 }
 
 // ---------- this turn, and taking a move back ----------

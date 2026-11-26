@@ -155,3 +155,17 @@ table.ship td { padding: 3px 6px; }
 .imgview img { max-width: 100%; max-height: 85vh; object-fit: contain; }
 .turn-moves > div { display: flex; justify-content: space-between; align-items: center;
   gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+
+/* The tech-slot board: each slot between its two edges, junctions between slots. */
+.slotboard { margin: 6px 0; }
+.slotrow { display: flex; align-items: stretch; gap: 4px; }
+.slotrow.dmg .tslot { background: #3a1e1e; }
+.slotrow .tslot { flex: 1; }
+.edge { display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  min-width: 26px; text-align: center; }
+.ic { font-size: 13px; line-height: 1.1; }
+.ic.none { opacity: .3; }
+.junction { margin: 2px 0 2px 30px; font-size: 12px; padding: 1px 6px;
+  border-left: 3px solid var(--line); }
+.junction.live { border-left-color: var(--accent); }
+.missionrow { border-bottom: 1px solid var(--line); padding: 6px 0; }

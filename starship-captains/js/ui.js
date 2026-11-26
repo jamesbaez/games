@@ -507,7 +507,8 @@ function techSlotsHtml(s, p, mine) {
   const parts = p.techSlots.map((sl, i) =>
     slot(sl, i) + (i < p.techSlots.length - 1 ? junction(i) : '')).join('');
   const pairs = countIconPairs(p);
-  return `<div class="slotboard">${parts}</div>
+  return `<h3>Tech slots ${pic('slotboard')}</h3>
+    <div class="slotboard">${parts}</div>
     ${mine ? `<p class="muted">A connector pays out only when the <b>same</b> icon sits on both
       facing edges (●&nbsp;●). ${pairs} matching pair${pairs === 1 ? '' : 's'} right now;
       pairs also score if you hold Starship Schematics.</p>` : ''}`;

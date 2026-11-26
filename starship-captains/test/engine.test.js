@@ -1019,6 +1019,11 @@ test('every card the UI offers a picture for has one on disk', () => {
   const has = (p) => existsSync(new URL(`../img/${p}.webp`, import.meta.url));
   for (const m of D.MISSIONS) assert.ok(has(`missions/${m.id}`), `mission crop ${m.id}`);
   for (const t of [...D.TECHS, ...D.OMEGA]) assert.ok(has(`techs/${t.id}`), `tech crop ${t.id}`);
+  for (let n = 1; n <= D.NUMBERED_TILES; n++) {
+    assert.ok(has(`tiles/up${n}`), `tile ${n} face up`);
+    assert.ok(has(`tiles/dn${n}`), `tile ${n} face down`);
+  }
+  for (const t of D.STATION_TILES) assert.ok(has(`tiles/st_${t.id}`), `station tile ${t.id}`);
   // The Tincan event is the tech on its track, not a card, so it has no crop of its own.
   for (const e of D.EVENTS.filter((e) => e.id !== 'tincan_tech')) {
     assert.ok(has(`events/${e.id}`), `event crop ${e.id}`);

@@ -620,21 +620,41 @@ function missionHtml(s, id, extra = '') {
 // ---------- the board, as a list ----------
 // A map is unreadable at phone width, so the board is a list: the routes you can actually
 // take first, then everything else, nearest first.
+// What sits on a planet, as tags with a picture button each. Used by both board tables, so
+// a planet with nothing on it says so rather than just showing a blank cell.
+const TILE_NOTE = 'Numbered tiles are the countdown to the pirate uprising. '
+  + 'Finishing a mission moves the highest face-up tile onto that planet, face down; '
+  + 'when tile 1 goes face down the uprising fires and all five turn face up again. '
+  + 'A tile on a planet is also what stops a new mission being dealt there.';
+
+function spotHtml(s, id) {
+  const bits = [];
+  const mission = s.missions[id];
+  const tile = s.tiles[id];
+  const station = Object.entries(s.stations).find(([, st]) => st.at === id && st.out);
+  bits.push(mission
+    ? `<span class="mtag">${missionLabel(mission)}</span> ${pic('missions/' + mission)}`
+    : '<span class="muted">no mission</span>');
+  if (tile) {
+    bits.push(`<span class="tag" title="${esc(TILE_NOTE)}">Tile ${tile.n}${tile.up ? '' : ' (face down)'}</span>`
+      + ` ${pic('tiles/' + (tile.up ? 'up' : 'dn') + tile.n)}`);
+  }
+  if (station) {
+    const def = D.STATION_TILES.find((t) => t.id === station[0]);
+    const gives = fxText(def.fx) + (station[1].bounty ? ', plus the event bounty' : '');
+    bits.push(`<span class="tag" title="End your turn here to get: ${esc(gives)}">${esc(def.name)}: ${esc(gives)}</span>`
+      + ` ${pic('tiles/st_' + def.id)}`);
+  }
+  for (const q of s.players.filter((q) => q.at === id)) bits.push(`<span class="tag">🚀 ${esc(q.name)}</span>`);
+  return bits;
+}
+
 function boardHtml(s, p, myTurn) {
   const dist = bfs(p.at);
   const here = routesAt(p.at);
-  const rows = (ids) => ids.map((id) => {
-    const who = s.players.filter((q) => q.at === id).map((q) => esc(q.name)).join(', ');
-    const mission = s.missions[id];
-    const tile = s.tiles[id];
-    const station = Object.entries(s.stations).find(([, st]) => st.at === id && st.out);
-    const bits = [];
-    if (mission) bits.push(`<span class="mtag">${missionLabel(mission)}</span> ${pic('missions/' + mission)}`);
-    if (tile) bits.push(`<span class="tag">Tile ${tile.n}${tile.up ? '' : ' (face down)'}</span>`);
-    if (station) bits.push(`<span class="tag">${esc(D.STATION_TILES.find((t) => t.id === station[0]).name)}</span>`);
-    if (who) bits.push(`<span class="tag">🚀 ${who}</span>`);
-    return `<tr><td>${esc(locName(id))}</td><td class="muted">${dist[id] ?? '–'}</td><td>${bits.join(' ')}</td></tr>`;
-  }).join('');
+  const rows = (ids) => ids.map((id) =>
+    `<tr><td>${esc(locName(id))}</td><td class="muted">${dist[id] ?? '–'}</td>
+      <td>${spotHtml(s, id).join(' ')}</td></tr>`).join('');
 
   const far = D.LOCS.map((l) => l.id).filter((id) => id !== p.at && !neighbours(p.at).includes(id))
     .sort((a, b) => (dist[a] ?? 99) - (dist[b] ?? 99));
@@ -647,9 +667,7 @@ function boardHtml(s, p, myTurn) {
         const col = D.ROUTES[i].c;
         return `<tr><td>${esc(locName(to))}</td>
           <td class="muted">${col ? `<span class="dot dot-${col}"></span>` : ''}</td>
-          <td>${s.pirates[i] ? `<span class="tag pir">${esc(pirate(s.pirates[i]))}</span>` : ''}
-            ${s.missions[to] ? `<span class="mtag">${missionLabel(s.missions[to])}</span> ${pic('missions/' + s.missions[to])}` : ''}
-            ${s.players.filter((q) => q.at === to).map((q) => `<span class="tag">🚀 ${esc(q.name)}</span>`).join('')}</td></tr>`;
+          <td>${s.pirates[i] ? `<span class="tag pir">${esc(pirate(s.pirates[i]))}</span> ` : ''}${spotHtml(s, to).join(' ')}</td></tr>`;
       }).join('')}
     </tbody></table>
     ${missionsHtml(s)}
@@ -657,6 +675,7 @@ function boardHtml(s, p, myTurn) {
     <details ${keepOpen('galaxy')}><summary>The rest of the galaxy</summary>
       <table class="board"><thead><tr><th>Planet</th><th>Jumps</th><th></th></tr></thead>
       <tbody>${rows(far)}</tbody></table></details>
+    <p class="muted">${TILE_NOTE}</p>
     ${myTurn && !ask(s) && !s.turn.acted ? missionHereHtml(s, p) : ''}`;
 }
 

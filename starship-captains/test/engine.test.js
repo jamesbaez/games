@@ -988,3 +988,28 @@ test('a hand-edited state reports as not replayable rather than undoing wrongly'
   assert.equal(undoable(tampered), null);
   expectError(() => act(tampered, { type: 'undo', move: 0 }));
 });
+
+test('each route holds the pirate token itself, and fighting pays out that token', () => {
+  const s = newGame();
+  const placed = s.pirates.filter(Boolean);
+  assert.equal(placed.length, D.SETUP_PIRATES.length, 'one pirate per skull route');
+  for (const tok of placed) {
+    assert.ok(D.ROUTE_COLORS.includes(tok.c), 'a pirate knows its exhaust colour');
+    assert.ok(D.PIRATE_REWARDS.includes(tok.reward), 'and what it pays out');
+  }
+  assert.equal(s.pirateBag.length, 30 - placed.length, 'the bag is short by what was placed');
+
+  // Fighting pays out the token on that route, not a fresh draw.
+  const p = s.players[0];
+  const i = routesAt(p.at).find((j) => s.pirates[j]) ?? routesAt('home')[0];
+  const g = structuredClone(s);
+  g.players[0].at = D.ROUTES[i].a;
+  g.pirates[i] = { c: D.ROUTES[i].c ?? 'red', reward: 'android' };
+  const bagBefore = g.pirateBag.length;
+  g.pending = [{ k: 'ask', q: 'fight' }];
+  let out = act(g, { type: 'choose', opt: i });
+  while (ask(out)) out = act(out, { type: 'choose', opt: pick(out) });
+  assert.equal(out.pirates[i], null, 'the pirate leaves the route');
+  assert.ok(out.players[0].ready.includes(D.ANDROID), 'the android reward was paid');
+  assert.equal(out.pirateBag.length, bagBefore, 'and no second token was drawn');
+});

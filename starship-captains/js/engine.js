@@ -38,7 +38,7 @@ const bag = (s, defs, key) => shuffle(s, defs.flatMap((d) => Array.from({ length
 export function setup({ names, seed = Date.now(), first } = {}) {
   if (!names?.length || names.length > 4) fail('Starship Captains is for 1-4 captains.');
   const s = {
-    v: 1,
+    v: 2,
     rng: (seed >>> 0) || 1,
     round: 1,
     over: false,
@@ -63,13 +63,7 @@ export function setup({ names, seed = Date.now(), first } = {}) {
   });
   s.eventsDone = 0;
 
-  // Pirates start on the routes marked with a skull.
-  s.pirates = D.ROUTES.map(() => false);
-  for (const [a, b] of D.SETUP_PIRATES) {
-    const i = D.routeBetween(a, b);
-    if (i < 0) fail(`setup pirate on a route that doesn't exist: ${a}-${b}`);
-    s.pirates[i] = true;
-  }
+  // Pirates are placed below, once the bag of tokens exists.
 
   // Deal the triangle tiles. The home station tile waits on the round track; the other
   // 7 (numbered 1-5 plus the two planet stations) go to random planets, and every planet
@@ -122,6 +116,16 @@ export function setup({ names, seed = Date.now(), first } = {}) {
   s.artifactDiscard = [];
   s.pirateBag = bag(s, D.PIRATES, null);
   s.pirateDiscard = [];
+
+  // Each route holds the pirate token itself, not just a flag, so you can see what a
+  // pirate is worth before you decide to fight it - the ship side is face up. It also
+  // means defeating one pays out the token that was actually sitting there.
+  s.pirates = D.ROUTES.map(() => null);
+  for (const [a, b] of D.SETUP_PIRATES) {
+    const i = D.routeBetween(a, b);
+    if (i < 0) fail(`setup pirate on a route that doesn't exist: ${a}-${b}`);
+    s.pirates[i] = s.pirateBag.pop() ?? null; // the skull routes take whatever comes out
+  }
 
   s.first = Number.isInteger(first) ? first : Math.floor(rand(s) * names.length);
   s.current = s.first;
@@ -643,7 +647,7 @@ function placePirate(s, loc) {
   if (!tok) return false;
   const i = routesAt(loc).find((j) => D.ROUTES[j].c === tok.c && !s.pirates[j]);
   if (i === undefined) { s.pirateDiscard.push(tok); log(s, `A ${tok.c} pirate finds nowhere to lurk.`); return false; }
-  s.pirates[i] = true;
+  s.pirates[i] = tok;
   log(s, `A ${tok.c} pirate moves in on the ${D.ROUTES[i].a}-${D.ROUTES[i].b} route.`);
   return true;
 }
@@ -799,7 +803,11 @@ function resolveEvent(s, def) {
       const up = Object.entries(s.tiles).filter(([, t]) => t.up);
       if (!up.length) break;
       const [loc] = up.reduce((b, c) => (c[1].n > b[1].n ? c : b));
-      for (const i of routesAt(loc)) if (!s.pirates[i]) s.pirates[i] = true;
+      for (const i of routesAt(loc)) {
+        if (s.pirates[i]) continue;
+        if (!s.pirateBag.length) s.pirateBag = shuffle(s, s.pirateDiscard.splice(0));
+        s.pirates[i] = s.pirateBag.pop() ?? null;
+      }
       log(s, `Pirates swarm ${locDef(loc).name}.`);
       break;
     }
@@ -1115,8 +1123,8 @@ function choose(s, p, opt) {
       if (opt === 'skip') break;
       const i = Number(opt);
       if (!routesAt(p.at).includes(i) || !s.pirates[i]) fail('No pirate on that route.');
-      s.pirates[i] = false;
-      const tok = s.pirateBag.pop() ?? { reward: 'medalArt' };
+      const tok = s.pirates[i];
+      s.pirates[i] = null;
       log(s, `${p.name} takes on the pirate and wins.`);
       takeDamage(s, p, 1);
       if (tok.reward === 'android') {

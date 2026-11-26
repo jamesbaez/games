@@ -16,7 +16,7 @@ const LS = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
   del(k) { try { localStorage.removeItem(k); } catch {} },
 };
-const SAVE_VERSION = 1; // bump with state.v in engine.js when the state shape changes
+const SAVE_VERSION = 2; // bump with state.v in engine.js when the state shape changes
 const RULEBOOK = 'https://czechgames.com/en/starship-captains/';
 const OFFLINE = 'Could not reach the game server. Check your connection and try again.';
 const RELOADING = 'Reloading the game, try again in a moment.';
@@ -368,7 +368,7 @@ function askHtml(s, p) {
   const body = {
     move: () => `${routesAt(p.at).map((r) => {
       const loc = routeEnd(r, p.at);
-      return choose(`${esc(locName(loc))}${s.pirates[r] ? ' ☠' : ''}${whatsAt(s, loc)}`, loc);
+      return choose(`${esc(locName(loc))}${s.pirates[r] ? ` \u2620 ${esc(s.pirates[r].c)}` : ''}${whatsAt(s, loc)}`, loc);
     }).join('')}
       ${f.orRepair ? choose('Repair 1 instead', 'repair', { cls: 'secondary' }) : ''}
       ${choose('Stay put', 'skip', { cls: 'secondary' })}`,
@@ -378,7 +378,7 @@ function askHtml(s, p) {
     fight: () => {
       const here = routesAt(p.at).filter((i) => s.pirates[i]);
       return here.length
-        ? `${here.map((i) => choose(`Fight the pirate towards ${esc(locName(routeEnd(i, p.at)))}`, i)).join('')}
+        ? `${here.map((i) => choose(`${esc(pirate(s.pirates[i]))} towards ${esc(locName(routeEnd(i, p.at)))}`, i)).join('')}
            ${choose('Do not fight', 'skip', { cls: 'secondary' })}`
         : `<p class="muted">No pirate on any route from here.</p>${choose('Continue', 'skip')}`;
     },
@@ -434,6 +434,11 @@ function whatsAt(s, loc) {
   if (st) bits.push(D.STATION_TILES.find((t) => t.id === st[0]).name);
   return bits.length ? ` — ${esc(bits.join(', '))}` : '';
 }
+
+// A pirate token: the exhaust colour decides which route it can ambush onto, and the
+// ship side is face up, so what it pays out is public before you decide to fight it.
+const REWARD = { android: '\ud83e\udd16 android', medalArt: '\ud83c\udf96+\u2b22' };
+const pirate = (tok) => (tok ? `\u2620 ${tok.c} (${REWARD[tok.reward] ?? tok.reward})` : '');
 
 const tokenName = (c) => (c?.t === 'art' ? `Artifact ${ART[c.id] ?? ''}` : c?.t === 'pir' ? 'Pirate token ☠' : 'Damage');
 const assigningId = () => null;
@@ -570,15 +575,36 @@ function boardHtml(s, p, myTurn) {
         const col = D.ROUTES[i].c;
         return `<tr><td>${esc(locName(to))}</td>
           <td class="muted">${col ? `<span class="dot dot-${col}"></span>` : ''}</td>
-          <td>${s.pirates[i] ? '<span class="tag pir">☠ pirate</span>' : ''}
+          <td>${s.pirates[i] ? `<span class="tag pir">${esc(pirate(s.pirates[i]))}</span>` : ''}
             ${s.missions[to] ? `<span class="mtag">${missionLabel(s.missions[to])}</span>` : ''}
             ${s.players.filter((q) => q.at === to).map((q) => `<span class="tag">🚀 ${esc(q.name)}</span>`).join('')}</td></tr>`;
       }).join('')}
     </tbody></table>
+    ${piratesHtml(s)}
     <details ${keepOpen('galaxy')}><summary>The rest of the galaxy</summary>
       <table class="board"><thead><tr><th>Planet</th><th>Jumps</th><th></th></tr></thead>
       <tbody>${rows(far)}</tbody></table></details>
     ${myTurn && !ask(s) && !s.turn.acted ? missionHereHtml(s, p) : ''}`;
+}
+
+// Every pirate on the board. Planning a route matters more than the one in front of you,
+// so this lists all of them, nearest first, with the ones you could fight now marked.
+function piratesHtml(s) {
+  const p = s.players[s.current];
+  const here = new Set(routesAt(p.at));
+  const dist = bfs(p.at);
+  const rows = s.pirates.map((tok, i) => (tok ? { tok, i } : null)).filter(Boolean)
+    .map(({ tok, i }) => {
+      const { a, b } = D.ROUTES[i];
+      const d = Math.min(dist[a] ?? 99, dist[b] ?? 99);
+      return { d, html: `<tr><td>${esc(locName(a))} – ${esc(locName(b))}</td>
+        <td>${esc(pirate(tok))}</td>
+        <td>${here.has(i) ? '<span class="tag">from here</span>' : `<span class="muted">${d} jump${d === 1 ? '' : 's'} away</span>`}</td></tr>` };
+    })
+    .sort((x, y) => x.d - y.d).map((r) => r.html).join('');
+  if (!rows) return '<div class="muted">No pirates on the board.</div>';
+  return `<details ${keepOpen('pirates')}><summary>Pirates (${s.pirates.filter(Boolean).length})</summary>
+    <table class="board"><tbody>${rows}</tbody></table></details>`;
 }
 
 function bfs(from) {

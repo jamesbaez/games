@@ -108,6 +108,18 @@ because you cannot un-see it.
 - **Tech bonuses.** When a tech goes into a slot, any edge icon matching the facing edge of
   the neighbouring slot or card pays out at once, resolved repair → medal → move.
 
+## Excess damage and repairs
+
+Excess damage sits on top of cargo slots that are already full, so no cargo slot can be
+cleared until the excess is gone. **Tech slots are exempt** - rulebook p. 9: "If you have
+excess damage, your cargo slots remain full of damage until all excess damage has been
+repaired. (But that does not prevent you from repairing tech slots instead.)" So a repair
+asks which you want whenever you have excess *and* a damaged tech slot.
+
+INTERPRETATION: a damaged basic room (from Sabotaged Negotiations) sits on the ship board,
+not the tech-slot board, so excess blocks repairing it the way it blocks cargo. The
+rulebook exempts only tech slots.
+
 ## Nothing is hidden between players
 
 Every input to `score` is open information, so the UI can show each player's ship, cargo

@@ -382,10 +382,11 @@ function askHtml(s, p) {
            ${choose('Do not fight', 'skip', { cls: 'secondary' })}`
         : `<p class="muted">No pirate on any route from here.</p>${choose('Continue', 'skip')}`;
     },
-    repair: () => `${p.cargo.map((c, i) => (c?.t === 'dmg' ? choose(`Cargo slot ${i + 1}`, { zone: 'cargo', i }) : '')).join('')}
+    repair: () => `${p.excess ? choose(`Excess damage (${p.excess})`, { zone: 'excess' }) : ''}
+      ${p.cargo.map((c, i) => (c?.t === 'dmg' && !p.excess ? choose(`Cargo slot ${i + 1}`, { zone: 'cargo', i }) : '')).join('')}
       ${p.techSlots.map((sl, i) => (sl.dmg ? choose(`Tech slot ${i + 1}`, { zone: 'tech', i }) : '')).join('')}
-      ${Object.keys(p.roomDmg).map((id) => choose(`${esc(D.ROOMS.find((r) => r.id === id).name)} room`, { zone: 'room', i: id })).join('')}
-      ${p.excess ? `<p class="muted">Excess damage is repaired first (${p.excess} left).</p>` : ''}`,
+      ${Object.keys(p.roomDmg).filter(() => !p.excess).map((id) => choose(`${esc(D.ROOMS.find((r) => r.id === id).name)} room`, { zone: 'room', i: id })).join('')}
+      ${p.excess ? '<p class="muted">Excess damage sits on top of full cargo slots, so no cargo slot can be cleared until it is gone \u2014 but a tech slot can be repaired instead.</p>' : ''}`,
     bump: () => `<p>No room for the damage. Jettison something:</p>
       ${p.cargo.map((c, i) => (c && c.t !== 'dmg' ? choose(tokenName(c), i) : '')).join('')}`,
     stow: () => `<p>No room for ${tokenName(f.tok)}. Jettison something, or leave it behind:</p>

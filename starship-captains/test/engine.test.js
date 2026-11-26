@@ -218,16 +218,34 @@ test('with every slot damaged, further damage stacks as excess', () => {
   assert.equal(ask(s).q, 'move', 'no choice needed, it just piles up');
 });
 
-test('repair clears excess damage before anything in a slot', () => {
+test('excess damage blocks the cargo slots but never the tech slots', () => {
+  // Rulebook p. 9: excess keeps the cargo slots full until it is gone, "(But that does
+  // not prevent you from repairing tech slots instead.)"
   const s = newGame();
-  const p = s.players[0];
-  p.excess = 2;
-  const before = damageCount(p);
-  // repairOne is internal; drive it through the repair room
-  let t = act(s, { type: 'activate', room: 'repair', with: { fig: 'g' } });
-  assert.equal(t.players[0].excess, 1, 'excess goes first');
-  assert.equal(damageCount(t.players[0]), before - 1);
-  assert.equal(ask(t), null, 'no slot choice needed while excess remains');
+  s.players[0].excess = 2;
+  const before = damageCount(s.players[0]);
+
+  // A ship starts with damaged tech slots, so the repair room must offer the choice.
+  const asked = act(s, { type: 'activate', room: 'repair', with: { fig: 'g' } });
+  assert.equal(ask(asked)?.q, 'repair', 'the choice is offered');
+  const techSlot = asked.players[0].techSlots.findIndex((t) => t.dmg);
+  const onTech = act(asked, { type: 'choose', opt: { zone: 'tech', i: techSlot } });
+  assert.equal(onTech.players[0].excess, 2, 'the excess is untouched');
+  assert.equal(onTech.players[0].techSlots[techSlot].dmg, false, 'the tech slot is clear');
+  assert.equal(damageCount(onTech.players[0]), before - 1);
+
+  // Cargo stays blocked while excess remains.
+  const cargoSlot = asked.players[0].cargo.findIndex((c) => c?.t === 'dmg');
+  if (cargoSlot >= 0) expectError(() => act(asked, { type: 'choose', opt: { zone: 'cargo', i: cargoSlot } }));
+  const onExcess = act(asked, { type: 'choose', opt: { zone: 'excess' } });
+  assert.equal(onExcess.players[0].excess, 1, 'excess can still be chosen');
+
+  // With no damaged tech slot there is nothing to choose, so it just clears the excess.
+  const g = structuredClone(s);
+  g.players[0].techSlots = g.players[0].techSlots.map((t) => ({ ...t, dmg: false }));
+  const auto = act(g, { type: 'activate', room: 'repair', with: { fig: 'g' } });
+  assert.equal(ask(auto), null, 'nothing to ask about');
+  assert.equal(auto.players[0].excess, 1, 'the excess is repaired');
 });
 
 test('a faction marker scores its zone, and a lap is worth +5', () => {
@@ -321,6 +339,8 @@ function pick(s) {
   const f = ask(s);
   const p = s.players[s.current];
   if (f.q === 'repair') {
+    // Excess first: it is the only thing that unblocks the cargo slots.
+    if (p.excess > 0) return { zone: 'excess' };
     const i = p.cargo.findIndex((c) => c?.t === 'dmg');
     return i >= 0 ? { zone: 'cargo', i } : { zone: 'tech', i: p.techSlots.findIndex((t) => t.dmg) };
   }

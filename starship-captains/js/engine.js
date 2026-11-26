@@ -619,12 +619,18 @@ export function takeDamage(s, p, n = 1) {
 }
 
 // Repair takes excess damage first, then needs a choice of slot (rulebook p. 9).
+// Excess damage sits on top of cargo slots that are already full, so no cargo slot can be
+// cleared until the excess is gone. Tech slots are the exception, rulebook p. 9: "If you
+// have excess damage, your cargo slots remain full of damage until all excess damage has
+// been repaired. (But that does not prevent you from repairing tech slots instead.)"
+// INTERPRETATION: a damaged basic room is on the ship board, not the tech-slot board, so
+// excess blocks it the way it blocks cargo.
 function repairOne(s, p) {
-  if (p.excess > 0) { p.excess--; log(s, `${p.name} repairs 1 damage.`); return; }
-  const cargo = p.cargo.some((c) => c?.t === 'dmg');
   const tech = p.techSlots.some((t) => t.dmg);
+  if (p.excess > 0 && !tech) { p.excess--; log(s, `${p.name} repairs 1 damage.`); return; }
+  const cargo = p.cargo.some((c) => c?.t === 'dmg');
   const room = Object.keys(p.roomDmg).length > 0;
-  if (!cargo && !tech && !room) return;
+  if (!p.excess && !cargo && !tech && !room) return;
   askFor(s, 'repair');
 }
 
@@ -1146,13 +1152,19 @@ function choose(s, p, opt) {
     }
     case 'repair': {
       const { zone, i } = opt ?? {};
-      if (zone === 'cargo') {
+      const blocked = () => { if (p.excess > 0) fail('Repair the excess damage first; only tech slots can be repaired before it.'); };
+      if (zone === 'excess') {
+        if (p.excess <= 0) fail('You have no excess damage.');
+        p.excess--;
+      } else if (zone === 'cargo') {
+        blocked();
         if (p.cargo[i]?.t !== 'dmg') fail('No damage in that cargo slot.');
         p.cargo[i] = null;
       } else if (zone === 'tech') {
         if (!p.techSlots[i]?.dmg) fail('No damage in that tech slot.');
         p.techSlots[i].dmg = false;
       } else if (zone === 'room') {
+        blocked();
         if (!p.roomDmg[i]) fail('That room is not damaged.');
         delete p.roomDmg[i];
       } else fail('Pick a slot to repair.');

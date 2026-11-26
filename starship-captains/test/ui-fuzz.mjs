@@ -111,7 +111,11 @@ for (; clicks < MAX_CLICKS && games < GAMES && !errors.length; clicks++) {
     return j.type === 'choose' && typeof j.opt === 'string' && !!JSON.parse(store['captains.local'] || '{}').missions?.[j.opt];
   });
   if (toMission.length && rnd() < 0.6) { click({ act: toMission[Math.floor(rnd() * toMission.length)] }); continue; }
-  const quiet = acts.filter((a) => !/"pass"/.test(a));
+  // Undo is clicked sparingly: taken every time it is offered, turns never finish.
+  const undos = acts.filter((a) => /"undo"/.test(a));
+  if (undos.length && rnd() < 0.08) { click({ act: undos[Math.floor(rnd() * undos.length)] }); continue; }
+  // Passing ends a player's whole round, so pick it rarely.
+  const quiet = acts.filter((a) => !/"pass"|"undo"/.test(a));
   const pool = quiet.length && rnd() < 0.93 ? quiet : acts;
   let pick = pool[Math.floor(rnd() * pool.length)];
   if (rnd() < 0.3) pick = acts.find((a) => /"endTurn"/.test(a)) || pick;

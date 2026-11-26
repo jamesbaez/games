@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   setup, apply, ask, score, winners, neighbours, routesAt, routeEnd, reservedBy,
   damageCount, canActivate, roomsFor, countIconPairs, bonusesFor, GameError,
-  techChoices, techSlotChoices, pump, trainCost, promoteCost, medalsAvailable, abilities,
+  techChoices, techSlotChoices, pump, undoable, revealsInfo, trainCost, promoteCost, medalsAvailable, abilities,
 } from '../js/engine.js';
 import * as D from '../js/data.js';
 
@@ -920,4 +920,71 @@ test('Metal-Eating Bugs can be paid by giving up an installed tech', () => {
   while (ask(kept)) kept = act(kept, { type: 'choose', opt: pick(kept) });
   assert.equal(kept.players[0].techSlots[2].tech, 'jump_drive', 'declining keeps the tech');
   assert.equal(kept.players[0].excess, 2, 'and gains no repair');
+});
+
+test('a move can be taken back later in the same turn', () => {
+  const s = newGame();
+  const p = s.players[0];
+  p.ready = ['r', 'y', 'b', D.CADET];
+  p.medals = 5;
+  assert.equal(s.history, null, 'no history before the turn s first move');
+
+  const a = act(s, { type: 'train', from: D.CADET, to: 'r' });
+  assert.equal(a.history.moves.length, 1);
+  const b = act(a, { type: 'promote', c: 'y' });
+  assert.equal(b.history.moves.length, 2);
+  assert.ok(b.players[0].ready.includes('Y'));
+
+  // Undo the training; the promotion still stands.
+  const out = act(b, { type: 'undo', move: 0 });
+  assert.equal(out.history.moves.length, 1);
+  assert.ok(out.players[0].ready.includes('Y'), 'the later move is replayed');
+  assert.ok(out.players[0].ready.includes(D.CADET), 'the cadet is back');
+  assert.equal(out.players[0].medals, 5 - D.PROMOTE_COST, 'only the promotion was paid for');
+});
+
+test('undo is refused for a move that revealed something', () => {
+  const s = newGame();
+  const p = s.players[0];
+  p.techSlots.forEach((sl) => { sl.tech = null; sl.dmg = false; });
+  // Researching takes a card off the board and the board refills from the deck, so the
+  // move hands out information.
+  let g = act(s, { type: 'activate', room: 'science', with: { fig: 'b' } });
+  g = act(g, { type: 'choose', opt: { card: g.tech.row[0], slot: 1 } });
+  while (ask(g)) g = act(g, { type: 'choose', opt: pick(g) });
+
+  const why = undoable(g);
+  assert.ok(why, 'the turn replays');
+  assert.ok(why.some((r) => r !== null), 'at least one move cannot be undone');
+  // Whichever move drew the card is refused by name.
+  const i = why.findIndex((r) => r !== null);
+  expectError(() => act(g, { type: 'undo', move: i }));
+});
+
+test('undoable explains every move, and the history resets each turn', () => {
+  const s = newGame();
+  s.players[0].ready = ['r', 'y'];
+  const a = act(s, { type: 'activate', room: 'repair', with: { fig: 'r' } });
+  const reasons = undoable(a);
+  assert.equal(reasons.length, a.history.moves.length);
+  for (const r of reasons) assert.ok(r === null || typeof r === 'string');
+
+  // Ending the turn clears the history: you cannot reach back into a finished turn.
+  let g = a;
+  while (ask(g)) g = act(g, { type: 'choose', opt: pick(g) });
+  g = act(g, { type: 'endTurn' });
+  assert.equal(g.history, null);
+  assert.deepEqual(undoable(g), []);
+  expectError(() => apply(g, { p: g.current, type: 'undo', move: 0 }));
+});
+
+test('a hand-edited state reports as not replayable rather than undoing wrongly', () => {
+  const s = newGame();
+  s.players[0].ready = ['r', 'y', D.CADET];
+  s.players[0].medals = 5;
+  const a = act(s, { type: 'train', from: D.CADET, to: 'r' });
+  const tampered = structuredClone(a);
+  tampered.players[0].medals += 7; // nothing in the history accounts for this
+  assert.equal(undoable(tampered), null);
+  expectError(() => act(tampered, { type: 'undo', move: 0 }));
 });

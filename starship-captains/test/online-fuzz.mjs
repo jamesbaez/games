@@ -228,13 +228,23 @@ while (Date.now() < end && !html.includes('Game over')) {
     submitHandler({ preventDefault() {} });
     continue;
   }
-  const enabled = [...html.matchAll(/<button class="[^"]*" +(disabled)? *data-act='([^']*)'/g)].filter((m) => !m[1]).map((m) => unesc(m[2]));
-  const undos = enabled.filter((a) => JSON.parse(a).type === 'undo'); // clicked sparingly, or games stall
-  const acts = enabled.filter((a) => !undos.includes(a));
+  const acts = [...html.matchAll(/<button[^>]*?data-act='([^']*)'/g)]
+    .filter((m) => !/\sdisabled/.test(m[0])).map((m) => unesc(m[1]));
+  // Taking a mission is two lobby-style clicks: pick the mission, then crew per line.
+  const crew = [...html.matchAll(/data-lobby="(assign|pickCrew)"(?:\s+data-(?:id|fig)="([^"]*)")?/g)];
+  if (crew.length && (!acts.length || rnd() < 0.4)) {
+    const m = crew[Math.floor(rnd() * crew.length)];
+    click(m[1] === 'assign' ? { lobby: 'assign', id: m[2] } : { lobby: 'pickCrew', fig: m[2] });
+    clicks++;
+    continue;
+  }
   if (!acts.length) continue;
-  let pick = acts[Math.floor(rnd() * acts.length)];
-  if (undos.length && rnd() < 0.1) pick = undos[Math.floor(rnd() * undos.length)];
-  else if (rnd() < 0.08) pick = acts.find((a) => /endOps|endSurface|endTurn/.test(a)) || pick;
+  const undos = acts.filter((a) => /"undo"/.test(a)); // clicked sparingly, or turns never finish
+  if (undos.length && rnd() < 0.08) { click({ act: undos[Math.floor(rnd() * undos.length)] }); clicks++; continue; }
+  const quiet = acts.filter((a) => !/"pass"|"undo"/.test(a));
+  const pool = quiet.length && rnd() < 0.93 ? quiet : acts;
+  let pick = pool[Math.floor(rnd() * pool.length)];
+  if (rnd() < 0.2) pick = acts.find((a) => /"endTurn"/.test(a)) || pick;
   click({ act: pick });
   clicks++;
 }

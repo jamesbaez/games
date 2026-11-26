@@ -5,7 +5,7 @@ import {
   setup, apply, ask, score, winners, neighbours, routesAt, routeEnd, reservedBy,
   damageCount, cargoTokens, canActivate, roomsFor, techChoices, techSlotChoices,
   bonusesFor, techDef, sharedTech, abilities, trainCost, promoteCost, medalsAvailable,
-  locDef, GameError,
+  locDef, undoable, GameError,
 } from './engine.js';
 import * as D from './data.js';
 import { onlineReady, createRoom, getRoom, writeRoom, watchRoom, postChat, markSeen, notify, alertTopic, packSave, unpackSave } from './net.js';
@@ -649,6 +649,62 @@ function shipHtml(s, p, mine) {
   }).join('')}</div>`;
 }
 
+// ---------- this turn, and taking a move back ----------
+// undoable() replays the whole turn, so cache it per state rather than per render.
+const undoCache = new WeakMap();
+function undoInfo(s) {
+  if (!undoCache.has(s)) undoCache.set(s, undoable(s));
+  return undoCache.get(s);
+}
+
+// A move in words, for the "this turn" list.
+function moveLabel(s, p, a) {
+  switch (a.type) {
+    case 'train': return `Trained ${figShort(a.from)} into ${figShort(a.to)}`;
+    case 'promote': return `Promoted ${figShort(a.c)}`;
+    case 'activate': {
+      const room = roomsFor(s, p).find((r) => r.id === a.room);
+      const who = a.with?.fig ? figShort(a.with.fig) : 'two artifacts';
+      return `${esc(room?.name ?? a.room)} with ${who}`;
+    }
+    case 'mission': {
+      const m = D.missionDef(s.missions[p.at] ?? '');
+      return `Took ${esc(m?.name ?? 'a mission')} with ${a.assign.map(figShort).join(' ')}`;
+    }
+    case 'choose': return `Chose ${esc(choiceLabel(a.opt))}`;
+    case 'pass': return 'Passed';
+    default: return esc(a.type);
+  }
+}
+
+function choiceLabel(opt) {
+  if (opt === null || opt === undefined) return '-';
+  if (typeof opt === 'object') {
+    if (opt.card) return techDef(opt.card)?.name ?? opt.card;
+    if (opt.room) return opt.room;
+    if (opt.from && opt.to) return `${opt.from} to ${opt.to}`;
+    if (opt.zone) return `repair ${opt.zone} ${Number(opt.i) + 1 || opt.i}`;
+    return JSON.stringify(opt);
+  }
+  return locDef(opt)?.name ?? D.missionDef(opt)?.name ?? String(opt);
+}
+
+// This turn's moves, newest first, each with an undo button or the reason it is stuck.
+function turnHtml(s, p) {
+  const moves = s.history?.moves || [];
+  if (!moves.length) return '';
+  const why = undoInfo(s);
+  const rows = moves.map(({ action }, i) => {
+    const undo = !why ? '' : why[i] === null
+      ? btn('\u21b6 Undo', { type: 'undo', move: i }, { cls: 'small secondary' })
+      : `<span class="muted">can't undo: ${esc(why[i])}</span>`;
+    return `<div><span>${i + 1}. ${moveLabel(s, p, action)}</span>${undo}</div>`;
+  }).reverse().join('');
+  const note = why ? '' : '<div class="muted">This turn\'s moves can\'t be undone: their history doesn\'t match the game.</div>';
+  return `<details ${keepOpen('turn')}><summary>This turn (${moves.length} move${moves.length > 1 ? 's' : ''})</summary>
+    <div class="turn-moves">${note}${rows}</div></details>`;
+}
+
 // ---------- what you can do ----------
 function actionsHtml(s, p) {
   if (ask(s)) return '';
@@ -809,6 +865,7 @@ function renderGame() {
     <h2>${esc(me.name)} (you) ${pic('dashboard')}</h2>
     ${shipHtml(s, me, true)}
     ${myTurn ? actionsHtml(s, me) : ''}
+    ${myTurn ? turnHtml(s, me) : ''}
     <h2>Tech board</h2>
     ${techBoardHtml(s)}
     <h2>Faction tracks</h2>

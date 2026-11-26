@@ -845,10 +845,120 @@ export function canActivate(fig, room) {
 }
 
 // ---------- actions ----------
+// The state keeps the current turn's history so a move can be taken back later in the
+// turn: history = { start: the state before the turn's first move, moves: [{ action,
+// revealed }] }, or null before the first move. Undo is just another action, so online
+// it saves and syncs like any other.
 export function apply(state, action) {
-  const s = structuredClone(state);
+  if (action.type === 'undo') return undoMove(state, action);
+  const { history, ...prev } = state;
+  const s = structuredClone(prev);
   step(s, action);
+  const revealed = revealsInfo(prev, s);
+  s.history = s.current !== prev.current || s.over ? null : {
+    start: history?.start ?? structuredClone(prev),
+    moves: [...(history?.moves || []), { action, revealed }],
+  };
   return s;
+}
+
+// ---------- undo ----------
+// True if going from prev to next exposed hidden information, or passed the turn. Such a
+// move can't be taken back, because you cannot un-see what it showed you.
+export function revealsInfo(prev, next) {
+  if (next.current !== prev.current || next.over || next.rng !== prev.rng) return true;
+  // A deck or bag that got shorter handed something out.
+  const shrank = (a, b) => a.length < b.length;
+  if (shrank(next.tech.deck, prev.tech.deck) || shrank(next.tech.omegaDeck, prev.tech.omegaDeck)) return true;
+  if (shrank(next.missionDeck, prev.missionDeck)) return true;
+  if (shrank(next.artifactBag, prev.artifactBag) || shrank(next.pirateBag, prev.pirateBag)) return true;
+  // A triangle tile turned over.
+  const faces = (s) => JSON.stringify(Object.entries(s.tiles).map(([k, t]) => [k, t.n, t.up]).sort());
+  if (faces(next) !== faces(prev)) return true;
+  // Gateway to the Stars shows you the top of the mission deck without moving a card.
+  const peeked = (s) => s.pending?.some((f) => f.k === 'ask' && f.q === 'peekMissions');
+  return !!(peeked(next) || peeked(prev));
+}
+
+// The current turn as states: before its first move, then after each move. Null if the
+// history doesn't lead to this state (edited by hand, or recorded under older rules).
+function replayTurn(s) {
+  if (!s.history) return [s];
+  const states = [s.history.start];
+  try {
+    for (const { action } of s.history.moves) states.push(apply(states.at(-1), action));
+  } catch (e) {
+    if (e instanceof GameError) return null;
+    throw e;
+  }
+  return JSON.stringify(states.at(-1)) === JSON.stringify(s) ? states : null;
+}
+
+// What a move exposed: for each hidden zone it changed, what that zone holds afterwards
+// and what it handed out. Two moves that reveal the same thing are interchangeable.
+function exposed(b, a) {
+  const changed = (x, y) => JSON.stringify(x) !== JSON.stringify(y);
+  return JSON.stringify([
+    a.rng !== b.rng && a.rng,
+    changed(a.tech.deck, b.tech.deck) && [a.tech.deck, a.tech.row, a.tech.omega],
+    changed(a.tech.omegaDeck, b.tech.omegaDeck) && [a.tech.omegaDeck, a.tech.omega],
+    changed(a.missionDeck, b.missionDeck) && [a.missionDeck, a.missions],
+    changed(a.artifactBag, b.artifactBag) && a.artifactBag,
+    changed(a.pirateBag, b.pirateBag) && a.pirateBag,
+    changed(a.tiles, b.tiles) && a.tiles,
+  ]);
+}
+
+// Replays the turn without move i. Refused if move i revealed something, if a later move
+// fails without it, or if a later move would reveal anything different.
+function takeBack(states, i) {
+  const { moves } = states.at(-1).history;
+  if (moves[i].revealed) fail('revealed hidden information');
+  let s = states[i];
+  for (let j = i + 1; j < moves.length; j++) {
+    let next;
+    try {
+      next = apply(s, moves[j].action);
+    } catch (e) {
+      if (e instanceof GameError) fail(`move ${j + 1} needs it`);
+      throw e;
+    }
+    if ((moves[j].revealed || revealsInfo(s, next)) && exposed(states[j], states[j + 1]) !== exposed(s, next)) {
+      fail(`would change what move ${j + 1} revealed`);
+    }
+    s = next;
+  }
+  return s;
+}
+
+// For each move this turn: null if it can be undone, otherwise why not.
+// Null instead of a list if this turn's history can't be replayed.
+export function undoable(s) {
+  const states = replayTurn(s);
+  if (!states) return null;
+  return (s.history?.moves || []).map((_, i) => {
+    try {
+      takeBack(states, i);
+      return null;
+    } catch (e) {
+      if (e instanceof GameError) return e.message;
+      throw e;
+    }
+  });
+}
+
+function undoMove(s, { p, move }) {
+  if (s.over) fail('The game is over.');
+  if (p !== s.current) fail('It is not your turn.');
+  if (!Number.isInteger(move) || !s.history?.moves[move]) fail('Nothing to undo.');
+  const states = replayTurn(s);
+  if (!states) fail("This turn's history doesn't match the game, so it can't be undone.");
+  try {
+    return structuredClone(takeBack(states, move)); // the start state is shared between states
+  } catch (e) {
+    if (e instanceof GameError) fail(`Can't undo move ${move + 1}: ${e.message}.`);
+    throw e;
+  }
 }
 
 function step(s, a) {

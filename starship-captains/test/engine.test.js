@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import {
-  setup, apply, ask, score, winners, neighbours, routesAt, routeEnd, reservedBy,
+  setup, apply, ask, score, winners, neighbours, routesAt, routeEnd, reservedBy, subordinates,
   damageCount, canActivate, roomsFor, countIconPairs, bonusesFor, GameError,
   techChoices, techSlotChoices, pump, undoable, revealsInfo, trainCost, promoteCost, medalsAvailable, abilities,
 } from '../js/engine.js';
@@ -1037,4 +1037,28 @@ test('the board picture has a spot for every planet and no stray ones', () => {
     assert.equal(xy.length, 2, `${id} has an x and a y`);
     for (const n of xy) assert.ok(n > 0 && n < 100, `${id} sits inside the picture`);
   }
+});
+
+
+test("a commander can only call up a cadet or an ensign of its own colour", () => {
+  const p = { queue: ['R', 'r', 'y', 'g', 'B', 'A'] };
+  // 'R' is the red commander itself: it goes to the queue the moment it is assigned, so
+  // the bug this guards against was offering the player their own commander back.
+  assert.deepEqual(subordinates(p, 'R'), ['r', 'g']);
+  assert.deepEqual(subordinates(p, 'B'), ['g']);
+  assert.deepEqual(subordinates(p, 'Y'), ['y', 'g']);
+  assert.equal(subordinates({ queue: [] }, 'R').length, 0);
+});
+
+test('the engine refuses a commander called up as a subordinate', () => {
+  const s = newGame();
+  const p = s.players[s.current];
+  const g = structuredClone(s);
+  g.players[g.current].queue = ['R', 'r'];
+  g.pending = [{ k: 'room', fig: 'R', phase: 'ask' }, { k: 'ask', q: 'second', fig: 'R' }];
+  expectError(() => act(g, { type: 'choose', opt: 'R' }));
+  const ok = act(g, { type: 'choose', opt: 'r' });
+  assert.ok(ok.players[ok.current].ready.includes('r'), 'the ensign reports to the ready room');
+  assert.ok(ok.players[ok.current].queue.includes('R'), 'the commander stays in the queue');
+  assert.ok(p, 'sanity');
 });

@@ -214,6 +214,13 @@ function omegaScore(s, p, card) {
   return (count ? count() : 0) * pts2;
 }
 
+// Who a commander may call up as its second task: "The subordinate must be either a cadet
+// or an ensign of the commander's color" (rulebook p. 13). Never another commander - and
+// never the commander itself, which is already in the queue by this point because it went
+// there the moment it was assigned.
+export const subordinates = (p, cmd) =>
+  p.queue.filter((x) => x === D.CADET || (!D.isCommander(x) && D.figColor(x) === D.figColor(cmd)));
+
 // Matching pairs of tech bonus icons across the whole tech-slot board, counting the
 // pair printed on the board itself wherever it is still uncovered.
 export function countIconPairs(p) {
@@ -1204,8 +1211,8 @@ function choose(s, p, opt) {
         // Command a subordinate: a cadet, or an ensign of the commander's own colour,
         // anywhere in the queue. Figures still out on the mission aren't in the queue.
         const want = opt;
-        if (want !== D.CADET && (D.isCommander(want) || D.figColor(want) !== D.figColor(cmd))) {
-          fail(`A ${D.figColor(cmd)} commander can only call up a cadet or a ${D.figColor(cmd)} ensign.`);
+        if (!subordinates(p, cmd).includes(want)) {
+          fail(`A ${D.figColor(cmd)} commander can only call up a cadet or a ${D.figColor(cmd)} ensign from the queue.`);
         }
         const i = p.queue.indexOf(want);
         if (i < 0) fail('That crew member is not in your queue.');

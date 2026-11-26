@@ -5,7 +5,7 @@ import {
   setup, apply, ask, score, winners, neighbours, routesAt, routeEnd, reservedBy,
   damageCount, cargoTokens, canActivate, roomsFor, techChoices, techSlotChoices,
   bonusesFor, techDef, sharedTech, abilities, trainCost, promoteCost, medalsAvailable,
-  countIconPairs, locDef, undoable, GameError,
+  countIconPairs, locDef, undoable, subordinates, GameError,
 } from './engine.js';
 import * as D from './data.js';
 import { onlineReady, createRoom, getRoom, writeRoom, watchRoom, postChat, markSeen, notify, alertTopic, packSave, unpackSave } from './net.js';
@@ -520,7 +520,7 @@ const bonusName = (ic) => ({ rep: '🔧 repair', med: '🎖 medal', mov: '➡️
 
 function secondAskHtml(s, p, f) {
   const cmd = f.fig;
-  const subs = p.queue.filter((x) => x === D.CADET || D.figColor(x) === D.figColor(cmd));
+  const subs = subordinates(p, cmd);
   const rooms = f.line === undefined ? roomsFor(s, p).filter((r) => canActivate(cmd, r)) : [];
   return `<p>${figName(cmd)} can do a second task.</p>
     ${f.line !== undefined ? choose('Resolve that mission line again', 'extra') : ''}

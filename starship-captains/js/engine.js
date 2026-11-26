@@ -209,7 +209,7 @@ function omegaScore(s, p, card) {
     damage: () => damageCount(p),
     figColor: () => crew.filter((f) => D.figColor(f) === c).length,
     iconPair: () => countIconPairs(p),
-    missionColor: () => p.done.filter((id) => D.missionColor(D.missionDef(id)) === c).length,
+    missionColor: () => p.done.filter((id) => D.missionHasColor(D.missionDef(id), c)).length,
   }[per];
   return (count ? count() : 0) * pts2;
 }
@@ -493,7 +493,7 @@ function finishMission(s, p, f) {
   log(s, `${p.name} completes ${m.name} (${m.pts} points).`);
   // An observer watching that faction, and the Ni'an Comms if the mission moved you
   // about or hurt - the two things the Ni'an care to hear about.
-  afterTrigger(s, p, 'afterMission', (d) => !d.c || d.c === D.missionColor(m));
+  afterTrigger(s, p, 'afterMission', (d) => !d.c || D.missionHasColor(m, d.c));
   afterTrigger(s, p, 'afterMissionWith', () => missionHad(m, ['damage', 'move', 'jump']));
   newMission(s, f.at);
 }

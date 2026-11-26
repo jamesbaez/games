@@ -460,8 +460,12 @@ export const MISSIONS = [
   ms('urgent_repair', 'Urgent Repair', 3, [L('b', ['repair', 1], ['coop', 1])]),
 ];
 
-// The mission's faction colour, which the Observer techs test.
-export const missionColor = (m) => m.lines[0].c;
+// Does a mission carry a line of this colour? The Observer techs and the Logs omega cards
+// both test it, and the rulebook appendix is explicit: "These cards care only about
+// whether the completed mission has at least 1 line of the depicted color. They don't care
+// if you used that line or not, and a mission with 2 red lines is the same as a mission
+// with 1." So this is NOT the first line's colour, which is what it used to read.
+export const missionHasColor = (m, c) => m.lines.some((l) => l.c === c);
 
 // --- Faction events ------------------------------------------------------------------
 // 11 event cards: 5 Cooperative, 5 Ni'an, and 1 Tincan. At setup the Cooperative and

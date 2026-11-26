@@ -1062,3 +1062,18 @@ test('the engine refuses a commander called up as a subordinate', () => {
   assert.ok(ok.players[ok.current].queue.includes('R'), 'the commander stays in the queue');
   assert.ok(p, 'sanity');
 });
+
+test('an observer fires on any line of its colour, not just the first', () => {
+  // Rulebook appendix: "These cards care only about whether the completed mission has at
+  // least 1 line of the depicted color." Lost World is yellow then blue, so the Tincan
+  // Observer must still report in.
+  const lost = D.missionDef('lost_world');
+  assert.deepEqual(lost.lines.map((l) => l.c), ['y', 'b']);
+  assert.ok(D.missionHasColor(lost, 'b'), 'blue is on the second line and still counts');
+  assert.ok(D.missionHasColor(lost, 'y'));
+  assert.ok(!D.missionHasColor(lost, 'r'));
+  // Every observer's colour must be one a mission can actually carry.
+  for (const t of D.TECHS.filter((t) => t.when === 'afterMission')) {
+    assert.ok(D.MISSIONS.some((m) => D.missionHasColor(m, t.c)), `${t.id} can fire at all`);
+  }
+});

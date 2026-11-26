@@ -108,6 +108,21 @@ because you cannot un-see it.
 - **Tech bonuses.** When a tech goes into a slot, any edge icon matching the facing edge of
   the neighbouring slot or card pays out at once, resolved repair → medal → move.
 
+## Nothing is hidden between players
+
+Every input to `score` is open information, so the UI can show each player's ship, cargo
+and current score in full without leaking anything:
+
+- **Artifacts in cargo are face up** (rulebook p. 9): "When you gain artifact or pirate
+  tokens, simply place them in empty cargo slots. Artifacts go face up." Only the supply
+  is face down, plus the artifacts the Crowdsourcing event puts on room techs - and the
+  fact that event has to say "face-down" is itself the proof that face up is the default.
+- **Omega techs** sit installed in a slot, face up, so their scoring condition is readable.
+- **Completed missions** are kept face down (p. 13), but only for tidiness: every player
+  watched that card sit face up on a planet and watched it being taken.
+
+The genuinely hidden zones are the decks and bags, listed under Undo below.
+
 ## Undo
 
 The current turn's history lives in the game state, so undo survives a reload, a device

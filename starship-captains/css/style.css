@@ -203,3 +203,10 @@ button.chip { cursor: pointer; }
 .chip.sh { background: transparent; border: none; font-size: 13px; }
 .chip.sh.me { text-shadow: 0 0 4px #fff, 0 0 2px #fff; }
 tr.at > td { background: rgba(240, 180, 41, .12); }
+
+/* An opponent's ship, set apart so it can't be read as your own. */
+.them {
+  border-left: 3px solid var(--line); padding-left: 8px; margin-top: 10px;
+  opacity: .92;
+}
+.them > h2 { margin-top: 6px; font-size: 1.05em; }

@@ -1023,9 +1023,13 @@ function renderGame() {
       ${message ? `<div class="alert">${esc(message)}</div>` : ''}
     </div>
     ${myTurn ? askHtml(s, me) : ''}`;
+  // The galaxy sits between your ship and everyone else's, so an opponent's board can't be
+  // mistaken for your own at a glance - on a phone these are one column, in this order.
   parts.mine = `
     <h2>The galaxy ${pic('board')}</h2>
     ${boardHtml(s, me, myTurn)}
+    ${others.map((o) => `<section class="them"><h2>${esc(o.name)} <span class="muted">(opponent)</span></h2>${shipHtml(s, o, false)}</section>`).join('')}
+    ${!s.over ? `<details ${keepOpen('score')}><summary>Current score</summary>${scoresHtml(s)}</details>` : ''}
     <h2>Log</h2>
     <div class="log">${s.log.slice().reverse().map((l) => `<div>${esc(l)}</div>`).join('')}</div>`;
   if (online) parts.chat = chatHtml(s, seat);
@@ -1037,9 +1041,7 @@ function renderGame() {
     <h2>Tech board</h2>
     ${techBoardHtml(s)}
     <h2>Faction tracks</h2>
-    ${tracksHtml(s)}
-    ${others.map((o) => `<h2>${esc(o.name)}</h2>${shipHtml(s, o, false)}`).join('')}
-    ${!s.over ? `<details ${keepOpen('score')}><summary>Current score</summary>${scoresHtml(s)}</details>` : ''}`;
+    ${tracksHtml(s)}`;
   for (const [k, html] of Object.entries(parts)) document.getElementById(`g-${k}`).innerHTML = html;
 }
 

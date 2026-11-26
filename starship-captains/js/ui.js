@@ -467,38 +467,50 @@ function techAskHtml(s, p, f) {
 // is what pays out when a card goes in, and what the omega Starship Schematics scores,
 // so you need to see it before choosing a slot - not after.
 const ICON = { rep: '\ud83d\udd27', med: '\ud83c\udf96', mov: '\u27a1\ufe0f' };
-const edgeIcons = (list) => (list.length ? list.map((ic) => `<span class="ic">${ICON[ic]}</span>`).join('') : '<span class="ic none">·</span>');
 
+// Your tech-slot board. Only the edges that FACE each other can ever pay out, so the
+// outer edges of the first and last slot are left off - they match nothing, ever.
+// Between each pair of slots all three connectors are listed, present or not, because
+// the question you are answering is "would a card with this icon match here?" and you
+// cannot answer it from a list of the icons that happen to exist.
 function techSlotsHtml(s, p, mine) {
-  // The icons on a slot's edge: the card's if one is installed, else the board's own.
   const side = (i, k) => {
     const t = p.techSlots[i].tech;
     return (t ? techDef(t) : D.SLOT_BOARD[i])[k] ?? [];
   };
-  const rows = p.techSlots.map((sl, i) => {
+  const slot = (sl, i) => {
     const d = sl.tech && techDef(sl.tech);
     const body = d
       ? `<b>${esc(d.name)}</b> ${pic('techs/' + sl.tech)}${sl.art ? ' <span class="tag">⬢ artifact</span>' : ''}
          ${d.text ? `<div class="muted">${esc(d.text)}</div>` : ''}
          ${d.room ? `<div class="tag room-${d.room}">Room: ${esc(fxText(d.fx))}</div>` : ''}`
       : `<span class="muted">${sl.dmg ? 'damaged — repair before using' : 'empty'}</span>`;
-    const match = i < p.techSlots.length - 1
-      ? D.BONUS_ICONS.filter((ic) => side(i, 'R').includes(ic) && side(i + 1, 'L').includes(ic)) : [];
-    const join = i < p.techSlots.length - 1
-      ? `<div class="junction${match.length ? ' live' : ''}">${match.length
-          ? `${match.map((ic) => ICON[ic]).join(' ')} <span class="muted">pays ${match.map(bonusName).join(' + ')}</span>`
-          : '<span class="muted">no match</span>'}</div>`
-      : '';
-    return `<div class="slotrow${sl.dmg ? ' dmg' : ''}">
-        <div class="edge">${edgeIcons(side(i, 'L'))}</div>
-        <div class="tslot"><div class="muted">Slot ${i + 1}${sl.dmg ? ' 💥' : ''}</div>${body}</div>
-        <div class="edge">${edgeIcons(side(i, 'R'))}</div>
-      </div>${join}`;
-  }).join('');
+    return `<div class="tslot${sl.dmg ? ' dmg' : ''}">
+      <div class="muted">Slot ${i + 1}${sl.dmg ? ' 💥' : ''}</div>${body}</div>`;
+  };
+  // The connectors between slot i and slot i+1: slot i's right edge facing i+1's left.
+  const junction = (i) => {
+    const L = side(i, 'R');
+    const R = side(i + 1, 'L');
+    const rows = D.BONUS_ICONS.map((ic) => {
+      const l = L.includes(ic);
+      const r = R.includes(ic);
+      const hit = l && r;
+      return `<div class="jrow${hit ? ' live' : ''}">
+        <span class="dotl">${l ? '●' : '·'}</span>
+        <span class="jic">${ICON[ic]}</span>
+        <span class="dotr">${r ? '●' : '·'}</span>
+        <span class="muted">${hit ? `pays ${esc(bonusName(ic))}` : ''}</span></div>`;
+    }).join('');
+    return `<div class="junction">${rows}</div>`;
+  };
+  const parts = p.techSlots.map((sl, i) =>
+    slot(sl, i) + (i < p.techSlots.length - 1 ? junction(i) : '')).join('');
   const pairs = countIconPairs(p);
-  return `<div class="slotboard">${rows}</div>
-    ${mine ? `<p class="muted">${pairs} matching pair${pairs === 1 ? '' : 's'} on the board.
-      A pair pays out when a card goes in, and scores if you hold Starship Schematics.</p>` : ''}`;
+  return `<div class="slotboard">${parts}</div>
+    ${mine ? `<p class="muted">A connector pays out only when the <b>same</b> icon sits on both
+      facing edges (●&nbsp;●). ${pairs} matching pair${pairs === 1 ? '' : 's'} right now;
+      pairs also score if you hold Starship Schematics.</p>` : ''}`;
 }
 
 const bonusName = (ic) => ({ rep: '🔧 repair', med: '🎖 medal', mov: '➡️ move' }[ic] ?? ic);

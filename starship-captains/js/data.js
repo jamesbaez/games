@@ -118,11 +118,14 @@ export const SHIP = {
 };
 
 // --- Tech bonus icons ----------------------------------------------------------------
-// There are exactly three bonus icons, and each is printed on its own fixed row of a
-// card/slot edge: repair on top, medal in the middle, move at the bottom. So an icon can
-// only ever line up with the same icon, and "matching adjacent icons" (rulebook p. 11)
-// just means: the two facing edges carry the same icon. Resolve matches top to bottom,
-// one effect per match even though the icon is visible on both sides.
+// There are exactly three bonus icons. A card or slot edge carries any subset of them,
+// and "matching adjacent icons" (rulebook p. 11) means the two FACING edges carry the
+// same icon - so what matters is which icons an edge has, not where they sit on it.
+// (An earlier note here claimed each icon had a fixed row; checking the cards against
+// close crops disproved it: Quadcorders prints move where Artifact Display prints medal.)
+// Resolve matches in BONUS_ICONS order, one effect per match even though the icon shows
+// on both sides. Only edges that face a neighbour can ever pay: the outer edges of the
+// first and last slot match nothing.
 export const BONUS_ICONS = ['rep', 'med', 'mov']; // in resolution order, top to bottom
 
 // Glyphs that are easy to confuse when reading the components:

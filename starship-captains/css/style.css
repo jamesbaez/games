@@ -156,16 +156,14 @@ table.ship td { padding: 3px 6px; }
 .turn-moves > div { display: flex; justify-content: space-between; align-items: center;
   gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
 
-/* The tech-slot board: each slot between its two edges, junctions between slots. */
+/* The tech-slot board: slots stacked, with the three connectors drawn between them. */
 .slotboard { margin: 6px 0; }
-.slotrow { display: flex; align-items: stretch; gap: 4px; }
-.slotrow.dmg .tslot { background: #3a1e1e; }
-.slotrow .tslot { flex: 1; }
-.edge { display: flex; flex-direction: column; justify-content: center; gap: 2px;
-  min-width: 26px; text-align: center; }
-.ic { font-size: 13px; line-height: 1.1; }
-.ic.none { opacity: .3; }
-.junction { margin: 2px 0 2px 30px; font-size: 12px; padding: 1px 6px;
-  border-left: 3px solid var(--line); }
-.junction.live { border-left-color: var(--accent); }
+.slotboard .tslot { flex: none; }
+.slotboard .tslot.dmg { background: #3a1e1e; }
+.junction { margin: 3px 0 3px 18px; padding: 3px 6px; border-left: 3px solid var(--line); }
+.jrow { display: flex; align-items: center; gap: 6px; font-size: 12px; opacity: .55; }
+.jrow.live { opacity: 1; font-weight: 600; }
+.dotl, .dotr { min-width: 12px; text-align: center; }
+.jrow.live .dotl, .jrow.live .dotr { color: var(--accent); }
+.jic { min-width: 18px; text-align: center; }
 .missionrow { border-bottom: 1px solid var(--line); padding: 6px 0; }

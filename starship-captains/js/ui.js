@@ -942,19 +942,23 @@ const glyphFor = (fx) => fx.map((tok) => {
 }).join(' ');
 
 function trackStripHtml(s, t, side, me) {
-  const cells = [];
-  for (let sp = 0; sp < D.TRACK_LEN; sp++) {
-    const bonus = side.bonus[sp];
-    const on = s.players.filter((q) => q.marks[t].sp === sp);
-    cells.push(`<div class="tsp z${D.TRACK_ZONE_PTS[sp]}${sp === D.EVENT_SPACE ? ' ev' : ''}">
-      <div class="n">${sp}${sp === D.EVENT_SPACE ? ' \u26a1' : ''}</div>
-      <div class="bn" title="${bonus ? esc(fxText(bonus)) : ''}">${bonus ? glyphFor(bonus) : ''}</div>
-      <div class="who">${on.map((q) => `<span class="mk${q === me ? ' me' : ''}" title="${esc(q.name)}">${esc(q.name)}</span>`).join('')}</div>
-    </div>`);
-  }
-  return `<div class="tstrip">${cells.join('')}</div>
+  const sp = [...Array(D.TRACK_LEN).keys()];
+  const head = sp.map((i) => `<th class="z${D.TRACK_ZONE_PTS[i]}${i === D.EVENT_SPACE ? ' ev' : ''}">${i}${i === D.EVENT_SPACE ? '\u26a1' : ''}</th>`).join('');
+  const rewards = sp.map((i) => {
+    const b = side.bonus[i];
+    return `<td class="z${D.TRACK_ZONE_PTS[i]}"${b ? ` title="${esc(fxText(b))}"` : ''}>${b ? glyphFor(b) : ''}</td>`;
+  }).join('');
+  const rows = s.players.map((q) => `<tr${q === me ? ' class="me"' : ''}><th>${esc(q.name)}</th>${
+    sp.map((i) => `<td class="z${D.TRACK_ZONE_PTS[i]}">${q.marks[t].sp === i ? '\u25cf' : ''}</td>`).join('')
+  }</tr>`).join('');
+  const laps = s.players.filter((q) => q.marks[t].loops).map((q) => `${esc(q.name)} +${q.marks[t].loops}`).join(', ');
+  return `<div class="tscroll"><table class="tstrip">
+      <tr><th>Space</th>${head}</tr>
+      <tr><th>Reward</th>${rewards}</tr>
+      ${rows}
+    </table></div>
     <p class="muted">Points by zone: spaces 1\u20133 are worth 1, 4\u20136 are 2, 7\u20139 are 3, 10\u201312 are 4.
-      \u26a1 space ${D.EVENT_SPACE} fires the event. A lap is worth ${D.TRACK_LOOP_PTS}.</p>`;
+      \u26a1 space ${D.EVENT_SPACE} fires the event. A lap is worth ${D.TRACK_LOOP_PTS}${laps ? `; laps so far: ${laps}` : ''}.</p>`;
 }
 
 function tracksHtml(s, me) {

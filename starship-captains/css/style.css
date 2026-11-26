@@ -215,22 +215,22 @@ tr.at > td { background: rgba(240, 180, 41, .12); }
 }
 .them > h2 { margin-top: 6px; font-size: 1.05em; }
 
-/* A faction track drawn from the data: 13 spaces side by side (trackStripHtml in ui.js). */
-.tstrip { display: flex; overflow-x: auto; gap: 2px; margin: 6px 0 2px; padding-bottom: 4px; }
-.tsp {
-  flex: 0 0 46px; min-height: 62px; border: 1px solid var(--line); border-radius: 5px;
-  padding: 2px; text-align: center; font-size: 11px;
+/* A faction track drawn from the data (trackStripHtml in ui.js): one row of spaces, one
+   of rewards, then a row per player, so each line reads straight across. */
+.tscroll { overflow-x: auto; margin: 6px 0 2px; }
+.tstrip { border-collapse: collapse; font-size: 11px; }
+.tstrip th, .tstrip td {
+  border: 1px solid var(--line); padding: 2px 0; min-width: 24px; text-align: center;
+  font-weight: 400;
 }
-.tsp .n { color: #888; font-size: 10px; }
-.tsp .bn { font-size: 13px; line-height: 18px; min-height: 18px; }
-.tsp .who { display: flex; flex-direction: column; gap: 1px; }
-.tsp .mk {
-  background: #555; color: #fff; border-radius: 3px; padding: 0 2px; font-size: 10px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.tstrip th:first-child, .tstrip td:first-child {
+  text-align: left; padding: 2px 5px 2px 2px; color: #888; white-space: nowrap;
+  position: sticky; left: 0; background: var(--bg, #111);
 }
-.tsp .mk.me { background: var(--accent, #f0b429); color: #000; font-weight: 700; }
-.tsp.ev { border-color: #b45309; }
-.tsp.z1 { background: rgba(255, 255, 255, .03); }
-.tsp.z2 { background: rgba(255, 255, 255, .06); }
-.tsp.z3 { background: rgba(255, 255, 255, .09); }
-.tsp.z4 { background: rgba(255, 255, 255, .13); }
+.tstrip tr.me > th:first-child { color: inherit; font-weight: 700; }
+.tstrip tr.me td { font-size: 14px; }
+.tstrip th.ev { color: #f0b429; }
+.tstrip .z1 { background: rgba(255, 255, 255, .03); }
+.tstrip .z2 { background: rgba(255, 255, 255, .06); }
+.tstrip .z3 { background: rgba(255, 255, 255, .09); }
+.tstrip .z4 { background: rgba(255, 255, 255, .13); }

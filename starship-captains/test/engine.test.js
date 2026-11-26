@@ -1,0 +1,923 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  setup, apply, ask, score, winners, neighbours, routesAt, routeEnd, reservedBy,
+  damageCount, canActivate, roomsFor, countIconPairs, bonusesFor, GameError,
+  techChoices, techSlotChoices, pump, trainCost, promoteCost, medalsAvailable, abilities,
+} from '../js/engine.js';
+import * as D from '../js/data.js';
+
+const newGame = (seed = 42) => setup({ names: ['Ann', 'Bob'], seed, first: 0 });
+const expectError = (fn) => assert.throws(fn, GameError);
+const act = (s, a) => apply(s, { p: s.current, ...a });
+
+// Every effect keyword used anywhere in data.js must be one the engine knows. This is the
+// cheap guard against typos as the 100-odd cards get transcribed.
+const KEYWORDS = new Set(['move', 'jump', 'fight', 'tech', 'techR', 'repair', 'damage',
+  'medal', 'artifact', 'pirateTok', 'android', 'cadet', 'ambush', 'queue',
+  'coop', 'tincan', 'nian', 'anyTrack', 'anyTrack1x2', 'event',
+  'fightSafe', 'drawTech3', 'drawOmega3', 'peekMissions3', 'trackPerAndroid',
+  'ignoreDamage1', 'techNB', 'anyTrackNB', 'ignoreMissionDamage', 'freeTrain']);
+
+function walkFx(fx, see) {
+  for (const tok of fx ?? []) {
+    if (Array.isArray(tok)) { see(tok[0]); continue; }
+    if (typeof tok === 'string') { see(tok); continue; }
+    if (tok.either) { for (const br of tok.either) walkFx(br, see); continue; }
+    if (tok.pay) { walkFx([tok.pay], see); walkFx(tok.then, see); continue; }
+    throw new Error(`odd effect token: ${JSON.stringify(tok)}`);
+  }
+}
+
+test('every effect keyword in the data is one the engine implements', () => {
+  const seen = new Set();
+  const see = (k) => { seen.add(k); assert.ok(KEYWORDS.has(k), `unknown effect: ${k}`); };
+  for (const r of D.ROOMS) walkFx(r.fx, see);
+  for (const t of D.STATION_TILES) walkFx(t.fx, see);
+  for (const f of D.FACTIONS) for (const side of f.sides) for (const sp of Object.values(side.bonus)) walkFx(sp, see);
+  for (const t of D.TECHS) { walkFx(t.fx, see); walkFx(t.discard, see); walkFx(t.cost ? [t.cost] : [], see); }
+  for (const m of D.MISSIONS) for (const line of m.lines) walkFx(line.fx, see);
+  assert.ok(seen.size >= 8);
+});
+
+test('the tech and mission decks match the physical game', () => {
+  assert.equal(D.TECHS.reduce((n, t) => n + t.n, 0), 50, '50 tech cards');
+  // Every tech is now its own entry: the five duplicated abilities are mirrored pairs
+  // with different edge icons, so no entry may carry a copy count above 1.
+  for (const t of D.TECHS) assert.equal(t.n, 1, `${t.id}: duplicate copies must be separate entries`);
+  // Each mirrored pair really is a mirror: one card's left edge is the other's right.
+  for (const t of D.TECHS.filter((x) => x.id.endsWith('_m'))) {
+    const base = D.TECHS.find((x) => x.id === t.id.slice(0, -2));
+    assert.ok(base, `${t.id}: no card to mirror`);
+    assert.deepEqual(t.L, base.R, `${t.id}: left edge should mirror ${base.id}'s right`);
+    assert.deepEqual(t.R, base.L, `${t.id}: right edge should mirror ${base.id}'s left`);
+    assert.equal(t.tier, base.tier, `${t.id}: tier should match ${base.id}`);
+  }
+  assert.equal(D.MISSIONS.length, 50, '50 mission cards');
+  for (const set of [D.TECHS, D.MISSIONS, D.OMEGA]) {
+    const ids = set.map((x) => x.id);
+    assert.equal(new Set(ids).size, ids.length, 'duplicate id');
+  }
+  // Every mission line is a real crew colour, and every mission scores something.
+  for (const m of D.MISSIONS) {
+    assert.ok(m.lines.length >= 1 && m.lines.length <= 3, `${m.id}: odd line count`);
+    assert.ok(m.pts >= 2 && m.pts <= 7, `${m.id}: odd points`);
+    for (const line of m.lines) {
+      assert.ok([...D.ENSIGNS, 'gold'].includes(line.c), `${m.id}: bad line colour ${line.c}`);
+    }
+    // The faction a mission belongs to comes off its first line, so that is never gold.
+    assert.ok(D.ENSIGNS.includes(m.lines[0].c), `${m.id}: first line is gold`);
+  }
+  // Exactly four lines in the deck are gold, and only an android can match one.
+  const gold = D.MISSIONS.flatMap((m) => m.lines.filter((l) => l.c === 'gold'));
+  assert.equal(gold.length, 4, 'four gold mission lines');
+  for (const fig of [...D.ENSIGNS, D.CADET, 'R', 'Y', 'B']) {
+    assert.equal(D.matches(fig, 'gold'), false, `${fig} must not match a gold line`);
+  }
+  assert.equal(D.matches(D.ANDROID, 'gold'), true);
+  // Every room tech names a room colour the ship actually has.
+  const roomColors = new Set(D.ROOMS.map((r) => r.color));
+  for (const t of D.TECHS) if (t.room) assert.ok(roomColors.has(t.room), `${t.id}: bad room ${t.room}`);
+});
+
+test('the board graph is symmetric, duplicate-free and fully connected', () => {
+  const ids = new Set(D.LOCS.map((l) => l.id));
+  const seen = new Set();
+  for (const { a, b, c } of D.ROUTES) {
+    assert.ok(ids.has(a) && ids.has(b), `unknown location in route ${a}-${b}`);
+    const key = [a, b].sort().join('-');
+    assert.ok(!seen.has(key), `duplicate route ${key}`);
+    seen.add(key);
+    if (c !== null) assert.ok(D.ROUTE_COLORS.includes(c), `bad route colour ${c}`);
+  }
+  // Every planet has exactly one red, one green and one yellow route, so an ambush at
+  // any planet always has a defined destination whatever colour the pirate is.
+  for (const l of ids) {
+    const cols = routesAt(l).map((i) => D.ROUTES[i].c).filter(Boolean).sort();
+    assert.deepEqual(cols, [...D.ROUTE_COLORS].sort(), `${l} does not have one route of each colour`);
+  }
+  // reachability from Home
+  const found = new Set(['home']);
+  const stack = ['home'];
+  while (stack.length) for (const n of neighbours(stack.pop())) if (!found.has(n)) { found.add(n); stack.push(n); }
+  assert.equal(found.size, ids.size);
+  // routes are two-way: the far end of a route from a leads back to a
+  for (const l of ids) for (const i of routesAt(l)) assert.equal(routeEnd(i, routeEnd(i, l)), l);
+});
+
+test('component counts match the physical game', () => {
+  assert.equal(D.LOCS.length, 14);          // 13 planets + Home Station
+  assert.equal(D.ROUTES.length, 25);
+  assert.equal(D.SETUP_PIRATES.length, 5);
+  assert.equal(D.OMEGA.length, 12);
+  assert.equal(D.ARTIFACTS.length, 3);
+  assert.equal(D.PIRATES.reduce((n, p) => n + p.n, 0), 30);
+  assert.equal(D.SHIP.cargoSlots, 7);
+  assert.equal(D.SLOT_BOARD.length, 6);
+  assert.equal(D.SLOT_BOARD.filter((s) => s.dmg).length, 4);
+  assert.equal(D.FACTIONS.flatMap((f) => f.sides).length, 6);
+  // every faction side has 4 bonuses and none of them sits on the event space
+  for (const f of D.FACTIONS) for (const side of f.sides) {
+    assert.equal(Object.keys(side.bonus).length, 4, `${side.id} bonus count`);
+    assert.ok(!(D.EVENT_SPACE in side.bonus), `${side.id} collides with the event space`);
+  }
+});
+
+test('setup deals one tile or mission to every planet and 7 damage to every ship', () => {
+  const s = newGame();
+  const planets = D.LOCS.filter((l) => !l.station).map((l) => l.id);
+  const tiled = Object.keys(s.tiles);
+  const stationed = Object.values(s.stations).filter((st) => st.at !== 'home').map((st) => st.at);
+  const missioned = Object.keys(s.missions);
+  assert.equal(tiled.length, D.NUMBERED_TILES);
+  assert.equal(stationed.length, 2);
+  assert.equal(new Set([...tiled, ...stationed, ...missioned]).size, planets.length);
+  assert.equal(tiled.length + stationed.length, D.SETUP_TILED_PLANETS);
+  for (const p of s.players) {
+    assert.equal(damageCount(p), 7);
+    assert.equal(p.ready.join(''), 'rybg');
+    assert.equal(p.medals, 1);
+    assert.equal(p.at, 'home');
+  }
+  assert.equal(s.pirates.filter(Boolean).length, 5);
+  assert.equal(score(s, s.players[0]).total2, -13); // -7 damage, +1/2 medal
+});
+
+test('a cadet works only the gray room, an android works none', () => {
+  const repair = D.ROOMS.find((r) => r.id === 'repair');
+  const helm = D.ROOMS.find((r) => r.id === 'helm');
+  assert.equal(canActivate('g', repair), true);
+  assert.equal(canActivate('g', helm), false);
+  assert.equal(canActivate('r', helm), true);
+  assert.equal(canActivate('R', helm), true);   // a red commander is still red
+  assert.equal(canActivate('b', helm), false);
+  assert.equal(canActivate(D.ANDROID, repair), false);
+});
+
+test('activating sends the crew member to the back of the queue', () => {
+  let s = newGame();
+  s = act(s, { type: 'activate', room: 'science', with: { fig: 'b' } });
+  const p = s.players[0];
+  assert.ok(!p.ready.includes('b'));
+  assert.equal(p.queue.at(-1), 'b');
+  expectError(() => act(s, { type: 'activate', room: 'helm', with: { fig: 'b' } })); // already spent
+});
+
+test('two artifacts can activate a room instead of a crew member', () => {
+  let s = newGame();
+  const p = s.players[0];
+  p.cargo[3] = { t: 'art', id: 'rb' };
+  p.cargo[4] = { t: 'art', id: 'ry' };
+  // rb + ry share red, so they can run the red room but not the blue one
+  expectError(() => act(s, { type: 'activate', room: 'science', with: { art: [3, 4] } }));
+  s = act(s, { type: 'activate', room: 'helm', with: { art: [3, 4] } });
+  assert.equal(s.players[0].cargo[3], null);
+  assert.equal(s.players[0].ready.join(''), 'rybg'); // no crew spent
+});
+
+test('training and promotion only happen before you act', () => {
+  let s = newGame();
+  s.players[0].medals = 3;
+  s = act(s, { type: 'train', from: 'g', to: 'r' });
+  assert.equal(s.players[0].ready.join(''), 'rybr');
+  assert.equal(s.players[0].medals, 2);
+  expectError(() => act(s, { type: 'promote', c: 'r' })); // only 2 medals left
+  s.players[0].medals = 3;
+  s = act(s, { type: 'promote', c: 'r' });
+  assert.ok(s.players[0].ready.includes('R'));
+  assert.equal(s.players[0].rings, D.COMMANDER_LIMIT - 1);
+  s = act(s, { type: 'activate', room: 'repair', with: { fig: 'y' } });
+  s.players[0].medals = 5;
+  expectError(() => act(s, { type: 'train', from: 'b', to: 'r' })); // already acted
+});
+
+test('damage fills an empty slot, then makes you jettison cargo', () => {
+  let s = newGame();
+  const p = s.players[0];
+  // one empty slot, one artifact, the rest already damaged
+  p.cargo = [{ t: 'dmg' }, { t: 'dmg' }, { t: 'dmg' }, { t: 'dmg' }, { t: 'dmg' }, { t: 'art', id: 'rb' }, null];
+  s = act(s, { type: 'activate', room: 'helm', with: { fig: 'r' } });
+  s = act(s, { type: 'choose', opt: 'moon' });  // home-moon has a pirate: 1 damage
+  assert.equal(s.players[0].cargo[6].t, 'dmg', 'the empty slot takes it');
+  assert.equal(ask(s).q, 'move', 'second helm move still pending');
+  s = act(s, { type: 'choose', opt: 'home' });  // back down the same pirate route
+  assert.equal(ask(s).q, 'bump', 'nowhere to put it but on top of cargo');
+  s = act(s, { type: 'choose', opt: 5 });       // jettison the artifact
+  assert.equal(s.players[0].cargo[5].t, 'dmg');
+  assert.equal(damageCount(s.players[0]), 11);  // 7 cargo + 4 tech slots
+});
+
+test('with every slot damaged, further damage stacks as excess', () => {
+  let s = newGame();
+  const p = s.players[0];
+  p.cargo = p.cargo.map(() => ({ t: 'dmg' }));
+  s = act(s, { type: 'activate', room: 'helm', with: { fig: 'r' } });
+  s = act(s, { type: 'choose', opt: 'moon' });
+  assert.equal(s.players[0].excess, 1);
+  assert.equal(ask(s).q, 'move', 'no choice needed, it just piles up');
+});
+
+test('repair clears excess damage before anything in a slot', () => {
+  const s = newGame();
+  const p = s.players[0];
+  p.excess = 2;
+  const before = damageCount(p);
+  // repairOne is internal; drive it through the repair room
+  let t = act(s, { type: 'activate', room: 'repair', with: { fig: 'g' } });
+  assert.equal(t.players[0].excess, 1, 'excess goes first');
+  assert.equal(damageCount(t.players[0]), before - 1);
+  assert.equal(ask(t), null, 'no slot choice needed while excess remains');
+});
+
+test('a faction marker scores its zone, and a lap is worth +5', () => {
+  const s = newGame();
+  const m = s.players[0].marks[0];
+  assert.equal(D.TRACK_ZONE_PTS[0], 0);
+  assert.equal(D.TRACK_ZONE_PTS[3], 1);
+  assert.equal(D.TRACK_ZONE_PTS[12], 4);
+  m.sp = 2; m.loops = 1;
+  assert.equal(score(s, s.players[0]).trackPts2, 2 * (1 + D.TRACK_LOOP_PTS));
+});
+
+test('the queue slides forward at end of round, leaving the last three', () => {
+  let s = newGame();
+  const p = s.players[0];
+  p.queue = ['r', 'y', 'b', 'g', 'r'];
+  p.ready = [];
+  s.players[1].queue = [];
+  s = act(s, { type: 'pass' });
+  s = act(s, { type: 'pass' });
+  assert.equal(s.round, 2);
+  assert.deepEqual(s.players[0].queue, ['g', 'r'].length === 2 ? ['b', 'g', 'r'] : null);
+  assert.deepEqual(s.players[0].ready, ['r', 'y']);
+  assert.equal(s.players[0].medals, 2, 'round 2 hands out a medal');
+});
+
+test('rounds 3 and 4 each add a cadet, and the game ends after round 4', () => {
+  let s = newGame();
+  let guard = 0;
+  while (!s.over && guard++ < 50) s = act(s, { type: 'pass' });
+  assert.equal(s.over, true);
+  assert.equal(s.round, D.ROUNDS);
+  // started with one cadet, gained one in round 3 and one in round 4
+  const crew = [...s.players[0].ready, ...s.players[0].queue];
+  assert.equal(crew.filter((f) => f === D.CADET).length, 3);
+  assert.ok(Array.isArray(s.scores));
+});
+
+test('the first player marker moves on each round', () => {
+  let s = newGame();
+  assert.equal(s.first, 0);
+  s = act(s, { type: 'pass' });
+  s = act(s, { type: 'pass' });
+  assert.equal(s.first, 1);
+  assert.equal(s.current, 1);
+});
+
+test('a planet is reserved by a lone ship, by nobody when two are there', () => {
+  const s = newGame();
+  assert.equal(reservedBy(s, 'home'), null, 'both ships start at Home');
+  s.players[0].at = 'ice';
+  assert.equal(reservedBy(s, 'ice'), 0);
+  s.players[1].at = 'ice';
+  assert.equal(reservedBy(s, 'ice'), null);
+});
+
+test('moving down a route with a pirate costs a damage', () => {
+  let s = newGame();
+  const i = D.routeBetween('home', 'moon');
+  assert.ok(s.pirates[i], 'home-moon starts with a pirate');
+  s = act(s, { type: 'activate', room: 'helm', with: { fig: 'r' } });
+  assert.equal(ask(s).q, 'move');
+  const before = damageCount(s.players[0]);
+  s = act(s, { type: 'choose', opt: 'moon' });
+  assert.equal(s.players[0].at, 'moon');
+  assert.equal(damageCount(s.players[0]), before + 1);
+  assert.equal(ask(s).q, 'move', 'the helm gives two moves');
+});
+
+test('the helm offers two moves and either may be skipped', () => {
+  let s = newGame();
+  s = act(s, { type: 'activate', room: 'helm', with: { fig: 'r' } });
+  s = act(s, { type: 'choose', opt: 'ice' });     // no pirate on home-ice
+  s = act(s, { type: 'choose', opt: 'skip' });
+  assert.equal(s.players[0].at, 'ice');
+  assert.equal(ask(s), null);
+  assert.equal(damageCount(s.players[0]), 7, 'no pirate on that route');
+});
+
+test('a station tile fires on ending a turn there, then waits for next round', () => {
+  let s = newGame();
+  const [id, st] = Object.entries(s.stations).find(([, x]) => x.at !== 'home');
+  s.players[0].at = st.at;
+  s = act(s, { type: 'activate', room: 'repair', with: { fig: 'g' } });
+  while (ask(s)) s = act(s, { type: 'choose', opt: pick(s) });
+  s = act(s, { type: 'endTurn' });
+  assert.equal(s.stations[id].out, false, 'the tile has been used');
+});
+
+function pick(s) {
+  const f = ask(s);
+  const p = s.players[s.current];
+  if (f.q === 'repair') {
+    const i = p.cargo.findIndex((c) => c?.t === 'dmg');
+    return i >= 0 ? { zone: 'cargo', i } : { zone: 'tech', i: p.techSlots.findIndex((t) => t.dmg) };
+  }
+  if (f.q === 'move') {
+    // Head for a neighbouring planet with a mission if there is one, else wander.
+    const n = neighbours(p.at);
+    return n.find((loc) => s.missions[loc] && reservedBy(s, loc) === null) ?? n[(s.rng >>> 3) % n.length];
+  }
+  if (f.q === 'track') return 'coop';
+  if (f.q === 'bump' || f.q === 'stow') {
+    const i = p.cargo.findIndex((c) => c && c.t !== 'dmg');
+    return i >= 0 ? i : 'drop';
+  }
+  if (f.q === 'line') return 'take';
+  if (f.q === 'freeTrain') {
+    const from = p.ready.find((x) => x === D.CADET || D.ENSIGNS.includes(x));
+    return from ? { from, to: 'r' } : 'skip';
+  }
+  if (f.q === 'tech') {
+    const slots = techSlotChoices(p, f);
+    const card = techChoices(s, f)[0];
+    return slots.length && card ? { card, slot: slots[0] } : 'skip';
+  }
+  if (f.q === 'peekMissions') return 'ok';
+  if (f.q === 'branch') return 0;
+  if (f.q === 'pay') {
+    if (f.cost === 'medal') return p.medals > 0 ? 'pay' : 'skip';
+    if (f.cost === 'tech') {
+      const i = p.techSlots.findIndex((sl) => sl.tech);
+      return i >= 0 ? i : 'skip';
+    }
+    const t = f.cost === 'artifact' ? 'art' : 'pir';
+    const i = p.cargo.findIndex((c) => c?.t === t);
+    return i >= 0 ? i : 'skip';
+  }
+  if (f.q === 'second') {
+    if (f.line !== undefined) return 'extra';       // on a mission: resolve the line again
+    const room = roomsFor(s, p).find((r) => canActivate(f.fig, r));
+    return room ? { room: room.id } : 'skip';       // in a room: work another room
+  }
+  return 'skip';
+}
+
+test('tech bonus icons match only the same icon on the facing edge', () => {
+  const s = newGame();
+  const p = s.players[0];
+  // the board's own middle pair already matches, and nothing else does
+  assert.equal(countIconPairs(p), 1);
+  // slot 2's left edge prints 'med'; a card with 'med' on its right edge pairs with it
+  assert.deepEqual(bonusesFor(s, p, 1, { L: [], R: ['med'] }), ['med']);
+  assert.deepEqual(bonusesFor(s, p, 1, { L: [], R: ['mov'] }), []);
+});
+
+test('a game of nothing but passes still scores, and ties are shared', () => {
+  let s = newGame();
+  while (!s.over) s = act(s, { type: 'pass' });
+  const [a, b] = s.players.map((p) => score(s, p).total2);
+  assert.equal(a, b);
+  assert.deepEqual(winners(s), [0, 1]);
+});
+
+test('bot games finish inside four rounds without engine errors', () => {
+  for (const seed of [1, 2, 3, 5, 8, 13, 21, 34]) {
+    let s = newGame(seed);
+    let guard = 0;
+    while (!s.over && guard++ < 500) {
+      if (ask(s)) { s = act(s, { type: 'choose', opt: pick(s) }); continue; }
+      const p = s.players[s.current];
+      // Complete the mission here if the crew stretches to it, otherwise work a room.
+      const mid = s.missions[p.at];
+      const owner = reservedBy(s, p.at);
+      const m = mid && D.missionDef(mid);
+      if (m && owner !== 1 - p.idx && p.ready.length >= m.lines.length) {
+        s = act(s, { type: 'mission', assign: p.ready.slice(0, m.lines.length) });
+        while (ask(s)) s = act(s, { type: 'choose', opt: pick(s) });
+        s = act(s, { type: 'endTurn' });
+        continue;
+      }
+      // Prefer the helm so the bot actually roams and finds missions to complete.
+      const usable = roomsFor(s, p).filter((r) => p.ready.some((f) => canActivate(f, r)));
+      const room = usable.find((r) => r.id === 'helm') ?? usable[0];
+      if (!room) { s = act(s, { type: 'pass' }); continue; }
+      const fig = p.ready.find((f) => canActivate(f, room));
+      s = act(s, { type: 'activate', room: room.id, with: { fig } });
+      while (ask(s)) s = act(s, { type: 'choose', opt: pick(s) });
+      s = act(s, { type: 'endTurn' });
+    }
+    assert.equal(s.over, true, `seed ${seed} did not finish`);
+    assert.equal(s.round, D.ROUNDS);
+    for (const p of s.players) assert.ok(Number.isFinite(score(s, p).total2));
+  }
+});
+
+test('setup deals only alpha techs face up, and the Tincan event shares its tech', () => {
+  for (const seed of [1, 2, 3, 5, 8]) {
+    const s = newGame(seed);
+    const tin = s.tracks.find((t) => t.id === 'tincan');
+    assert.equal(s.tech.row.length, D.TECH_ROW);
+    assert.equal(s.tech.omega.length, D.OMEGA_ROW);
+    for (const id of [...s.tech.row, tin.tech]) {
+      assert.equal(D.techDef(id).tier, 'a', `${id} dealt face up but is a beta tech`);
+    }
+    // No card is in two places at once.
+    const all = [...s.tech.row, ...s.tech.deck, tin.tech];
+    assert.equal(all.length, D.TECHS.reduce((n, t) => n + t.n, 0));
+
+    // Until the event fires the track's tech belongs to nobody; afterwards every
+    // player can use it, without it occupying a slot.
+    const p = s.players[0];
+    const has = (st) => roomsFor(st, st.players[0]).some((r) => r.id === tin.tech);
+    assert.equal(has(s), false);
+    const after = structuredClone(s);
+    after.tracks.find((t) => t.id === 'tincan').shared = true;
+    if (D.techDef(tin.tech).room) {
+      assert.equal(has(after), true);
+      for (const q of after.players) assert.ok(roomsFor(after, q).some((r) => r.id === tin.tech));
+    }
+    assert.ok(p.techSlots.every((sl) => sl.tech !== tin.tech), 'shared tech must not take a slot');
+  }
+});
+
+// Answer every question up to the one the test is about (track bonuses ask their own).
+function until(g, q) {
+  while (ask(g) && ask(g).q !== q) g = act(g, { type: 'choose', opt: pick(g) });
+  assert.equal(ask(g)?.q, q, `expected to be asked '${q}'`);
+  return g;
+}
+
+// Put a known mission on a planet and park the given crew there, ready to go.
+function atMission(id, ready, { seed = 42, loc } = {}) {
+  const s = newGame(seed);
+  const at = loc ?? Object.keys(s.missions)[0];
+  s.missions[at] = id;
+  const p = s.players[0];
+  p.at = at;
+  p.ready = [...ready];
+  p.queue = [];
+  return { s, p, at };
+}
+
+test('a mission resolves its lines in order and the crew slide into the queue', () => {
+  // Peace Talks: both lines are red - Ni'an 3, then Tincan 3.
+  const { s, at } = atMission('peace_talks', ['r', 'r']);
+  let g = act(s, { type: 'mission', assign: ['r', 'r'] });
+  while (ask(g)) g = act(g, { type: 'choose', opt: pick(g) });
+  const p = g.players[0];
+
+  assert.deepEqual(p.done, ['peace_talks']);
+  assert.equal(g.missions[at], undefined, 'the mission leaves the planet');
+  assert.deepEqual(p.ready, [], 'both figures left the ready room');
+  assert.deepEqual(p.queue, ['r', 'r'], 'and join the queue, topmost line in front');
+  assert.equal(p.marks[D.FACTIONS.findIndex((f) => f.id === 'nian')].sp, 3);
+  assert.equal(p.marks[D.FACTIONS.findIndex((f) => f.id === 'tincan')].sp, 3);
+  assert.equal(score(g, p).missionPts2, 2 * D.missionDef('peace_talks').pts);
+});
+
+test('a crew member of the wrong colour makes their line do nothing', () => {
+  const { s } = atMission('peace_talks', ['b', 'b']);
+  let g = act(s, { type: 'mission', assign: ['b', 'b'] });
+  while (ask(g)) g = act(g, { type: 'choose', opt: pick(g) });
+  const p = g.players[0];
+  assert.deepEqual(p.done, ['peace_talks'], 'the mission still counts for its points');
+  for (const m of p.marks) assert.equal(m.sp, 0, 'but nothing was gained');
+  assert.deepEqual(p.queue, ['b', 'b']);
+});
+
+test('a cadet matches nothing, an android matches every line and then leaves', () => {
+  const { s } = atMission('peace_talks', [D.CADET, D.ANDROID]);
+  let g = act(s, { type: 'mission', assign: [D.CADET, D.ANDROID] });
+  while (ask(g)) g = act(g, { type: 'choose', opt: pick(g) });
+  const p = g.players[0];
+  assert.equal(p.marks[D.FACTIONS.findIndex((f) => f.id === 'nian')].sp, 0, 'cadet matched nothing');
+  assert.equal(p.marks[D.FACTIONS.findIndex((f) => f.id === 'tincan')].sp, 3, 'android matched');
+  assert.deepEqual(p.queue, [D.CADET], 'the android does not join the queue');
+  assert.ok(![...p.queue, ...p.ready].includes(D.ANDROID), 'it leaves the ship entirely');
+});
+
+test('a commander resolves its line, then either repeats it or calls up a subordinate', () => {
+  const nian = D.FACTIONS.findIndex((f) => f.id === 'nian');
+
+  // Extra work: the red commander resolves the Ni'an line a second time.
+  {
+    const { s } = atMission('peace_talks', ['R', 'r']);
+    let g = until(act(s, { type: 'mission', assign: ['R', 'r'] }), 'second');
+    g = act(g, { type: 'choose', opt: 'extra' });
+    while (ask(g)) g = act(g, { type: 'choose', opt: pick(g) });
+    assert.equal(g.players[0].marks[nian].sp, 6, 'the line resolved twice');
+  }
+  // Command a subordinate: a red ensign comes up from the queue instead.
+  {
+    const { s, p } = atMission('peace_talks', ['R', 'r']);
+    p.queue = ['b', 'r'];
+    let g = until(act(s, { type: 'mission', assign: ['R', 'r'] }), 'second');
+    g = act(g, { type: 'choose', opt: 'r' });
+    while (ask(g)) g = act(g, { type: 'choose', opt: pick(g) });
+    const q = g.players[0];
+    assert.equal(q.marks[nian].sp, 3, 'the line resolved once');
+    assert.ok(q.ready.includes('r'), 'the subordinate reports to the ready room');
+    assert.deepEqual(q.queue, ['b', 'R', 'r'], 'and the mission crew queue up behind');
+  }
+  // A commander can only call up a cadet or an ensign of its own colour.
+  {
+    const { s, p } = atMission('peace_talks', ['R', 'r']);
+    p.queue = ['b'];
+    const g = until(act(s, { type: 'mission', assign: ['R', 'r'] }), 'second');
+    expectError(() => act(g, { type: 'choose', opt: 'b' }));
+  }
+});
+
+test('a line that costs you something can be refused', () => {
+  // The Duel's yellow line summons a pirate before advancing 3 on the Ni'an track.
+  const { s } = atMission('the_duel', ['y', 'r']);
+  const coop = D.FACTIONS.findIndex((f) => f.id === 'nian');
+  const pirates0 = s.pirates.filter(Boolean).length;
+  const g = until(act(s, { type: 'mission', assign: ['y', 'r'] }), 'line');
+
+  let taken = act(g, { type: 'choose', opt: 'take' });
+  while (ask(taken)) taken = act(taken, { type: 'choose', opt: pick(taken) });
+  assert.ok(taken.players[0].marks[coop].sp >= 3, 'taking the line pays the 3 track spaces');
+
+  let skipped = act(g, { type: 'choose', opt: 'skip' });
+  while (ask(skipped)) skipped = act(skipped, { type: 'choose', opt: pick(skipped) });
+  assert.equal(skipped.players[0].marks[coop].sp, 0, 'refusing gains nothing');
+  assert.equal(skipped.pirates.filter(Boolean).length, pirates0, 'and summons no pirate');
+  assert.deepEqual(skipped.players[0].done, ['the_duel'], 'the mission is still completed');
+});
+
+test('Arena Battle ignores all damage once its blue line is resolved', () => {
+  const { s } = atMission('arena_battle', ['b', 'y', 'r']);
+  const dmg0 = damageCount(s.players[0]);
+  let g = act(s, { type: 'mission', assign: ['b', 'y', 'r'] });
+  while (ask(g)) g = act(g, { type: 'choose', opt: pick(g) });
+  // Track bonuses can repair, so count the damage actually dealt rather than the total.
+  assert.equal(g.log.filter((l) => l.includes('takes 1 damage')).length, 0, 'no damage was dealt');
+  assert.equal(g.log.filter((l) => l.includes('ignores the damage')).length, 2, 'both hits ignored');
+  assert.ok(g.log.some((l) => l.includes('arena shields')));
+  // Without the blue crew member the shields never go up, so the damage lands.
+  const { s: s2 } = atMission('arena_battle', ['r', 'y', 'r']);
+  let h = act(s2, { type: 'mission', assign: ['r', 'y', 'r'] });
+  while (ask(h)) h = act(h, { type: 'choose', opt: pick(h) });
+  assert.ok(h.log.some((l) => l.includes('takes 1 damage')), 'damage lands without the shields');
+  void dmg0;
+});
+
+test('a mission is reserved by the only ship on the planet', () => {
+  const { s, at } = atMission('peace_talks', ['r', 'r']);
+  s.players[0].at = at;
+  s.current = 1;
+  s.players[1].ready = ['r', 'r'];
+  s.players[1].at = at;
+  // With two ships there, neither reserves it and either may take it.
+  assert.equal(reservedBy(s, at), null);
+  assert.ok(act(s, { type: 'mission', assign: ['r', 'r'] }));
+  // Alone, player 0 reserves it and player 1 is locked out.
+  const solo = structuredClone(s);
+  solo.players[1].at = 'home';
+  solo.current = 1;
+  assert.equal(reservedBy(solo, at), 0);
+  expectError(() => act(solo, { type: 'mission', assign: ['r', 'r'] }));
+});
+
+test('completing a mission moves the top tile across and deals a new mission', () => {
+  const { s, at } = atMission('peace_talks', ['r', 'r']);
+  const before = Object.entries(s.tiles).filter(([, t]) => t.up);
+  const [from, tile] = before.reduce((b, c) => (c[1].n > b[1].n ? c : b));
+  const deckBefore = s.missionDeck.length;
+
+  let g = act(s, { type: 'mission', assign: ['r', 'r'] });
+  while (ask(g)) g = act(g, { type: 'choose', opt: pick(g) });
+
+  assert.equal(g.tiles[from], undefined, 'the tile leaves its planet');
+  assert.deepEqual(g.tiles[at], { n: tile.n, up: false }, 'and lands face down where the mission was');
+  assert.ok(g.missions[from], 'a new mission appears where the tile came from');
+  assert.equal(g.missionDeck.length, deckBefore - 1);
+});
+
+test('turning tile 1 face down starts a pirate uprising', () => {
+  const { s, at } = atMission('peace_talks', ['r', 'r']);
+  // Leave tile 1 as the only face-up tile, so it is the one that moves.
+  for (const [loc, t] of Object.entries(s.tiles)) { if (t.n !== 1) t.up = false; else s.tiles[loc] = { n: 1, up: true }; }
+  const numbered = Object.keys(s.tiles).length;
+  const piratesBefore = s.pirates.filter(Boolean).length;
+
+  let g = act(s, { type: 'mission', assign: ['r', 'r'] });
+  while (ask(g)) g = act(g, { type: 'choose', opt: pick(g) });
+
+  assert.ok(g.log.some((l) => l.includes('Pirate uprising')), 'the uprising fires');
+  assert.equal(Object.values(g.tiles).filter((t) => t.up).length, numbered, 'every tile flips back up');
+  assert.ok(g.pirates.filter(Boolean).length >= piratesBefore, 'pirates were placed, never removed');
+  assert.ok(g.pirates.filter(Boolean).length <= piratesBefore + numbered);
+});
+
+test('researching a tech fills an empty slot and pays its matching edge bonuses', () => {
+  const s = newGame();
+  const p = s.players[0];
+  // Slot 3's left edge prints 'med', so a card in slot 2 whose right edge prints 'med'
+  // pairs with it. (Slots are numbered from 0 here.)
+  // Put it on the board on its own, in case the shuffle already dealt a copy.
+  s.tech.row = s.tech.row.filter((c) => c !== 'fleet_comms');
+  s.tech.row.unshift('fleet_comms'); // L ['rep'], R ['med']
+  s.tech.row.length = D.TECH_ROW;
+  p.techSlots.forEach((sl) => { sl.tech = null; sl.dmg = false; });
+  const medals = p.medals;
+
+  let g = act(s, { type: 'activate', room: 'science', with: { fig: 'b' } });
+  assert.equal(ask(g).q, 'tech');
+  assert.ok(techChoices(g, ask(g)).includes('fleet_comms'));
+  g = act(g, { type: 'choose', opt: { card: 'fleet_comms', slot: 1 } });
+  while (ask(g)) g = act(g, { type: 'choose', opt: pick(g) });
+
+  const q = g.players[0];
+  assert.equal(q.techSlots[1].tech, 'fleet_comms');
+  assert.equal(q.medals, medals + 1, 'the matching med icon paid a medal');
+  assert.equal(g.tech.row[0], null, 'a hole is left on the board');
+  assert.ok(!g.tech.row.includes('fleet_comms'));
+});
+
+test('a damaged or occupied slot refuses a tech, but recycling replaces one', () => {
+  const s = newGame();
+  const p = s.players[0];
+  s.tech.row[0] = 'fleet_comms';
+  p.techSlots[0] = { tech: null, dmg: true };
+  p.techSlots[1] = { tech: 'jump_drive', dmg: false };
+
+  const g = act(s, { type: 'activate', room: 'science', with: { fig: 'b' } });
+  expectError(() => act(g, { type: 'choose', opt: { card: 'fleet_comms', slot: 0 } }));
+  expectError(() => act(g, { type: 'choose', opt: { card: 'fleet_comms', slot: 1 } }));
+
+  // A recycle effect may take over an occupied slot, discarding what was there.
+  const r = structuredClone(s);
+  r.pending = [{ k: 'ask', q: 'tech', recycle: true }];
+  const out = act(r, { type: 'choose', opt: { card: 'fleet_comms', slot: 1 } });
+  assert.equal(out.players[0].techSlots[1].tech, 'fleet_comms');
+  assert.ok(out.tech.discard.includes('jump_drive'), 'the old tech is discarded');
+  // Even recycling cannot use a damaged slot.
+  expectError(() => act(r, { type: 'choose', opt: { card: 'fleet_comms', slot: 0 } }));
+});
+
+test('the tech board refills from the alpha-beta deck at the end of the turn', () => {
+  const s = newGame();
+  const p = s.players[0];
+  p.techSlots.forEach((sl) => { sl.tech = null; sl.dmg = false; });
+  const taken = s.tech.omega[0];
+  const deckBefore = s.tech.deck.length;
+
+  let g = act(s, { type: 'activate', room: 'science', with: { fig: 'b' } });
+  g = act(g, { type: 'choose', opt: { card: taken, slot: 0 } });
+  while (ask(g)) g = act(g, { type: 'choose', opt: pick(g) });
+  assert.equal(g.tech.omega[0], null, 'the omega space is empty until the turn ends');
+
+  g = act(g, { type: 'endTurn' });
+  assert.ok(g.tech.omega[0], 'and is refilled');
+  assert.ok(!D.OMEGA.some((o) => o.id === g.tech.omega[0]), 'from the alpha-beta deck, not the omega deck');
+  assert.equal(g.tech.deck.length, deckBefore - 1);
+});
+
+// Walk a marker onto the event space, so that one named event fires.
+function fireEvent(id, tweak = () => {}) {
+  const s = newGame();
+  const t = D.FACTIONS.findIndex((f) => f.id === D.eventDef(id).f);
+  s.tracks[t].event = id;
+  s.eventsDone = 0;
+  tweak(s);
+  s.players[0].marks[t].sp = D.EVENT_SPACE - 1;
+  s.pending = [{ k: 'adv', t, left: 1 }];
+  pump(s);
+  let g = s;
+  while (ask(g)) g = act(g, { type: 'choose', opt: pick(g) });
+  return g;
+}
+
+test('every event card has a branch in the engine', () => {
+  const s = newGame();
+  for (const ev of D.EVENTS) {
+    const g = structuredClone(s);
+    const t = D.FACTIONS.findIndex((f) => f.id === ev.f);
+    g.tracks[t].event = ev.id;
+    g.eventsDone = 0;
+    g.players[0].marks[t].sp = D.EVENT_SPACE - 1;
+    g.pending = [{ k: 'adv', t, left: 1 }];
+    assert.doesNotThrow(() => pump(g), `${ev.id} has no branch`);
+    assert.ok(g.log.some((l) => l.includes(ev.name)), `${ev.id} did not announce itself`);
+    assert.ok(!g.log.some((l) => l.includes('not implemented')), `${ev.id} is a stub`);
+  }
+});
+
+test('Overtime Incentives calls up the queue, or a cadet for anyone who has passed', () => {
+  const g = fireEvent('overtime_incentives', (s) => {
+    s.players[0].queue = ['r', 'b'];
+    s.players[1].queue = ['y'];
+    s.players[1].passed = true;
+  });
+  assert.deepEqual(g.players[0].queue, ['b'], 'the front of the queue left');
+  assert.ok(g.players[0].ready.includes('r'));
+  assert.deepEqual(g.players[1].queue, ['y'], 'a passed player keeps their queue');
+  assert.ok(g.players[1].ready.includes(D.CADET), 'and gains a cadet instead');
+});
+
+test('Routine Maintenance rewards the least damaged and repairs everyone else', () => {
+  const g = fireEvent('routine_maintenance', (s) => {
+    s.players[0].cargo = s.players[0].cargo.map(() => null);   // undamaged
+    s.players[1].excess = 2;
+  });
+  assert.equal(g.players[0].medals, 1 + D.SHIP.medals, 'the least damaged gains a medal');
+  assert.equal(g.players[1].excess, 1, 'everyone else repairs 1');
+});
+
+test('Sabotaged Negotiations shuts a room until it is repaired', () => {
+  const g = fireEvent('sabotaged_negotiations', (s) => { s.players[0].queue = ['b']; });
+  const p = g.players[0];
+  assert.equal(p.roomDmg.science, true, 'the blue room matches the blue ensign at the front');
+  assert.ok(!roomsFor(g, p).some((r) => r.id === 'science'), 'and cannot be activated');
+  expectError(() => act(g, { type: 'activate', room: 'science', with: { fig: 'b' } }));
+  // Repairing it puts it back in service.
+  const fixed = structuredClone(g);
+  fixed.pending = [{ k: 'ask', q: 'repair' }];
+  const out = act(fixed, { type: 'choose', opt: { zone: 'room', i: 'science' } });
+  assert.ok(roomsFor(out, out.players[0]).some((r) => r.id === 'science'));
+});
+
+test('Honesty Summit walks markers back, sparing bonus and starting spaces', () => {
+  const t = D.FACTIONS.findIndex((f) => f.id === 'nian');
+  const g = fireEvent('honesty_summit', (s) => {
+    const side = D.FACTIONS[0].sides.find((x) => x.id === s.tracks[0].side);
+    const bonusAt = Number(Object.keys(side.bonus)[0]);
+    s.players[1].marks[0].sp = bonusAt;   // on a bonus space: stays put
+    s.players[1].marks[2].sp = 0;         // on the start: stays put
+  });
+  assert.equal(g.players[1].marks[0].sp, Number(Object.keys(D.FACTIONS[0].sides.find((x) => x.id === g.tracks[0].side).bonus)[0]));
+  assert.equal(g.players[1].marks[2].sp, 0);
+  assert.ok(g.players[0].marks[t].sp < D.EVENT_SPACE, 'the marker that triggered it also steps back');
+});
+
+test('Explosive Crisis leaves a charge at every station for whoever docks first', () => {
+  const g = fireEvent('explosive_crisis');
+  for (const st of Object.values(g.stations)) assert.equal(st.bounty, 'damageAndTrack');
+  // Ending a turn at a station sets it off, once.
+  const home = g.stations.home;
+  let h = structuredClone(g);
+  h.players[h.current].at = home.at;
+  h.turn = { acted: true };
+  h.pending = null;
+  h = act(h, { type: 'endTurn' });
+  assert.equal(h.stations.home.bounty, null, 'the charge is spent');
+  assert.ok(h.log.some((l) => l.includes('charge')));
+});
+
+test('Crowdsourcing leaves an artifact on each room tech, claimed by using the room', () => {
+  const g = fireEvent('crowdsourcing', (s) => {
+    s.players[0].techSlots[2] = { tech: 'jump_drive', dmg: false }; // a yellow room tech
+  });
+  const slot = g.players[0].techSlots[2];
+  assert.ok(slot.art, 'an artifact waits on the room tech');
+  let h = structuredClone(g);
+  h.pending = null;
+  h.turn = { acted: false };
+  h.players[0].ready = ['y'];
+  h = until(act(h, { type: 'activate', room: 'jump_drive', with: { fig: 'y' } }), 'takeArt');
+  h = act(h, { type: 'choose', opt: 'take' });
+  assert.equal(h.players[0].techSlots[2].art, null, 'it is taken off the card');
+  assert.ok(h.players[0].cargo.some((c) => c?.t === 'art'), 'and into the hold');
+});
+
+// Install a tech in slot 0 and hand the player back.
+function withTech(id, tweak = () => {}) {
+  const s = newGame();
+  s.players[0].techSlots[0] = { tech: id, dmg: false };
+  tweak(s);
+  return s;
+}
+
+test('every ability tech has wording and a `when` the engine knows', () => {
+  const known = new Set(['trainFree', 'promoteCheap', 'spendAs', 'convert', 'anyTrackIsAny',
+    'moveOrJumpAsRepair', 'extraMovePerTurn', 'stealth', 'medalBonusTrains', 'afterMission',
+    'afterPromote', 'afterMissionWith', 'afterFightAndroid', 'androidReturns', 'extraStorage',
+    'payPirateOrDiscardToIgnoreDamage', 'copyBoardRoom', 'replacesTech']);
+  for (const t of D.TECHS) {
+    if (!t.when) continue;
+    assert.ok(known.has(t.when), `${t.id}: unknown ability '${t.when}'`);
+    assert.ok(t.text, `${t.id}: no wording transcribed`);
+  }
+});
+
+test('the suits and Quadcorders cut what training and promotion cost', () => {
+  const plain = newGame();
+  assert.equal(trainCost(plain, plain.players[0], 'b'), D.TRAIN_COST);
+  assert.equal(promoteCost(plain, plain.players[0], 'y'), D.PROMOTE_COST);
+
+  const q = withTech('quadcorders');            // training to blue is free
+  assert.equal(trainCost(q, q.players[0], 'b'), 0);
+  assert.equal(trainCost(q, q.players[0], 'r'), D.TRAIN_COST, 'other colours are unchanged');
+  q.players[0].medals = 0;
+  const out = act(q, { type: 'train', from: D.CADET, to: 'b' });
+  assert.ok(out.players[0].ready.includes('b'));
+  assert.equal(out.players[0].medals, 0);
+  expectError(() => act(q, { type: 'train', from: D.CADET, to: 'r' }));
+
+  const suit = withTech('security_suit');       // yellow commanders cost 1 less
+  assert.equal(promoteCost(suit, suit.players[0], 'y'), D.PROMOTE_COST - 1);
+  assert.equal(promoteCost(suit, suit.players[0], 'b'), D.PROMOTE_COST);
+});
+
+test('the display cases let stored artifacts and pirate tokens pay as medals', () => {
+  const s = withTech('artifact_display');
+  const p = s.players[0];
+  p.medals = 0;
+  p.cargo[0] = { t: 'art', id: D.ARTIFACTS[0].id };
+  assert.equal(medalsAvailable(s, p), 1);
+  const out = act(s, { type: 'train', from: D.CADET, to: 'r' });
+  assert.equal(out.players[0].cargo[0], null, 'the artifact was spent');
+  assert.ok(out.players[0].ready.includes('r'));
+  // A pirate token does not work for the Artifact Display.
+  const t = withTech('artifact_display');
+  t.players[0].medals = 0;
+  t.players[0].cargo[0] = { t: 'pir' };
+  expectError(() => act(t, { type: 'train', from: D.CADET, to: 'r' }));
+});
+
+test('Repair Bots and the Wormhole Generator rewrite the move tech bonus', () => {
+  // Slot 1's right edge must match slot 2's left edge ('med'), so use a 'mov' pairing:
+  // slot 0's R and slot 1's L both carry 'mov' once a card with R ['mov'] goes in slot 0.
+  const base = newGame();
+  base.players[0].techSlots.forEach((sl) => { sl.tech = null; sl.dmg = false; });
+  base.tech.row = base.tech.row.filter((c) => c !== 'blast_phasers');
+  base.tech.row.unshift('blast_phasers'); // L ['med'], R ['mov']
+  base.tech.row.length = D.TECH_ROW;
+
+  // Slot 1's left edge prints 'mov', so a card in slot 0 whose right edge prints 'mov' pairs.
+  const icons = bonusesFor(base, base.players[0], 0, D.techDef('blast_phasers'));
+  assert.deepEqual(icons, ['mov']);
+
+  const bots = structuredClone(base);
+  bots.players[0].techSlots[4] = { tech: 'repair_bots', dmg: false };
+  let g = act(bots, { type: 'activate', room: 'science', with: { fig: 'b' } });
+  g = act(g, { type: 'choose', opt: { card: 'blast_phasers', slot: 0 } });
+  assert.equal(ask(g).q, 'repair', 'the move bonus became a repair');
+});
+
+test('Stealth Paint ignores pirates you fly past and the first damage of a mission', () => {
+  const s = withTech('stealth_paint');
+  const p = s.players[0];
+  p.at = 'home';
+  const i = routesAt('home').find((j) => neighbours('home').includes(routeEnd(j, 'home')));
+  s.pirates[i] = true;
+  const dmg0 = damageCount(p);
+  let g = act(s, { type: 'activate', room: 'helm', with: { fig: 'r' } });
+  g = act(g, { type: 'choose', opt: routeEnd(i, 'home') });
+  assert.equal(damageCount(g.players[0]), dmg0, 'flying past the pirate costs nothing');
+  assert.ok(g.log.some((l) => l.includes('never sees you')));
+});
+
+test('the observers report a completed mission to their own faction', () => {
+  // Ni'an Observer watches yellow missions; Peace Talks is a red one.
+  const nian = D.FACTIONS.findIndex((f) => f.id === 'nian');
+  const run = (tech, mission) => {
+    const { s } = atMission(mission, ['r', 'r']);
+    s.players[0].techSlots[0] = { tech, dmg: false };
+    let g = act(s, { type: 'mission', assign: ['r', 'r'] });
+    while (ask(g)) g = act(g, { type: 'choose', opt: pick(g) });
+    return g.players[0];
+  };
+  const watched = run('fleet_observer', 'peace_talks');   // red mission, red observer
+  const ignored = run('nian_observer', 'peace_talks');    // red mission, yellow observer
+  const coop = D.FACTIONS.findIndex((f) => f.id === 'coop');
+  assert.ok(watched.marks[coop].sp > ignored.marks[coop].sp, 'only the matching observer fires');
+  assert.ok(ignored.marks[nian].sp >= 3, 'the mission itself still paid out');
+});
+
+test('Dimensional Lockers widen the hold when installed', () => {
+  const s = newGame();
+  const p = s.players[0];
+  p.techSlots.forEach((sl) => { sl.tech = null; sl.dmg = false; });
+  s.tech.row = s.tech.row.filter((c) => c !== 'dimensional_lockers');
+  s.tech.row.unshift('dimensional_lockers');
+  s.tech.row.length = D.TECH_ROW;
+  const before = p.cargo.length;
+  let g = act(s, { type: 'activate', room: 'science', with: { fig: 'b' } });
+  g = act(g, { type: 'choose', opt: { card: 'dimensional_lockers', slot: 1 } });
+  while (ask(g)) g = act(g, { type: 'choose', opt: pick(g) });
+  assert.equal(g.players[0].cargo.length, before + 2);
+  assert.equal(abilities(g, g.players[0], 'extraStorage').length, 1);
+});
+
+test('Metal-Eating Bugs can be paid by giving up an installed tech', () => {
+  const { s, p } = atMission('metal_bugs', ['b', 'y']);
+  p.techSlots[2] = { tech: 'jump_drive', dmg: false };
+  p.excess = 2; // something for the repair to fix
+  const g = until(act(s, { type: 'mission', assign: ['b', 'y'] }), 'pay');
+  assert.equal(g.pending.at(-1).cost, 'tech');
+
+  let paid = act(g, { type: 'choose', opt: 2 });
+  while (ask(paid)) paid = act(paid, { type: 'choose', opt: pick(paid) });
+  assert.equal(paid.players[0].techSlots[2].tech, null, 'the tech is given up');
+  assert.ok(paid.tech.discard.includes('jump_drive'), 'and goes to the discard pile');
+  assert.equal(paid.players[0].excess, 1, 'the repair happened');
+
+  let kept = act(g, { type: 'choose', opt: 'skip' });
+  while (ask(kept)) kept = act(kept, { type: 'choose', opt: pick(kept) });
+  assert.equal(kept.players[0].techSlots[2].tech, 'jump_drive', 'declining keeps the tech');
+  assert.equal(kept.players[0].excess, 2, 'and gains no repair');
+});

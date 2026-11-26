@@ -876,6 +876,14 @@ function techBoardHtml(s) {
     <p class="muted">${s.tech.deck.length} techs left in the deck.</p>`;
 }
 
+// The Tincan event has no card of its own: it turns the tech sitting on the track into a
+// shared one, so its picture is that tech's card.
+function eventPic(s, t, ev) {
+  if (ev.id !== 'tincan_tech') return ' ' + pic('events/' + ev.id);
+  const tech = s.tracks[t].tech;
+  return tech ? ` — ${esc(techDef(tech).name)} ${pic('techs/' + tech)}` : '';
+}
+
 function tracksHtml(s) {
   return D.FACTIONS.map((fa, t) => {
     const side = fa.sides.find((x) => x.id === s.tracks[t].side);
@@ -884,7 +892,7 @@ function tracksHtml(s) {
       <b>${esc(fa.name)}</b> <span class="muted">(${esc(side.id)})</span>
       <div>${s.players.map((q) => `${esc(q.name)} ${q.marks[t].sp}`).join(' · ')}</div>
       <div class="muted">Bonuses: ${Object.entries(side.bonus).map(([sp, fx]) => `${sp}: ${esc(fxText(fx))}`).join(' · ')}</div>
-      <div class="muted">Event space ${D.EVENT_SPACE}: ${ev ? esc(ev.name) : '<i>already resolved</i>'}${ev && t === D.FACTIONS.findIndex((x) => x.id === 'tincan') && s.tracks[t].tech ? ` — ${esc(techDef(s.tracks[t].tech).name)}` : ''}</div>
+      <div class="muted">Event space ${D.EVENT_SPACE}: ${ev ? esc(ev.name) : '<i>already resolved</i>'}${ev ? eventPic(s, t, ev) : ''}</div>
       ${ev ? `<div class="muted">${esc(ev.text)}</div>` : ''}</div>`;
   }).join('');
 }

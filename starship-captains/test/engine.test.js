@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import {
   setup, apply, ask, score, winners, neighbours, routesAt, routeEnd, reservedBy,
   damageCount, canActivate, roomsFor, countIconPairs, bonusesFor, GameError,
@@ -1012,4 +1013,14 @@ test('each route holds the pirate token itself, and fighting pays out that token
   assert.equal(out.pirates[i], null, 'the pirate leaves the route');
   assert.ok(out.players[0].ready.includes(D.ANDROID), 'the android reward was paid');
   assert.equal(out.pirateBag.length, bagBefore, 'and no second token was drawn');
+});
+
+test('every card the UI offers a picture for has one on disk', () => {
+  const has = (p) => existsSync(new URL(`../img/${p}.webp`, import.meta.url));
+  for (const m of D.MISSIONS) assert.ok(has(`missions/${m.id}`), `mission crop ${m.id}`);
+  for (const t of [...D.TECHS, ...D.OMEGA]) assert.ok(has(`techs/${t.id}`), `tech crop ${t.id}`);
+  // The Tincan event is the tech on its track, not a card, so it has no crop of its own.
+  for (const e of D.EVENTS.filter((e) => e.id !== 'tincan_tech')) {
+    assert.ok(has(`events/${e.id}`), `event crop ${e.id}`);
+  }
 });

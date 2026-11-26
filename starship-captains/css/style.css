@@ -200,8 +200,12 @@ button.chip { cursor: pointer; }
 .chip.st.gold { background: #b8860b; }
 .chip.st.blue { background: #2a7fa8; }
 .chip.st.home { background: #6b3fa0; }
-.chip.sh { background: transparent; border: none; font-size: 13px; }
-.chip.sh.me { text-shadow: 0 0 4px #fff, 0 0 2px #fff; }
+.chip.sh {
+  background: transparent; border: none; font-size: 11px; font-weight: 700;
+  max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: inline-block; line-height: 18px;
+}
+.chip.sh.me { text-shadow: 0 0 4px #fff, 0 0 3px #fff; }
 tr.at > td { background: rgba(240, 180, 41, .12); }
 
 /* An opponent's ship, set apart so it can't be read as your own. */

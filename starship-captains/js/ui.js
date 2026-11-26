@@ -641,7 +641,7 @@ function mapHtml(s, p) {
       chips.push(`<button class="chip st ${def.id}" data-img="img/tiles/st_${def.id}.webp" title="${esc(def.name)}: ${esc(fxText(def.fx))}">\u2b22</button>`);
     }
     for (const q of s.players.filter((q) => q.at === id)) {
-      chips.push(`<span class="chip sh${q === p ? ' me' : ''}" title="${esc(q.name)}">\u{1F680}</span>`);
+      chips.push(`<span class="chip sh${q === p ? ' me' : ''}" title="${esc(q.name)}">\u{1F680}\u202f${esc(q.name)}</span>`);
     }
     return chips.length ? `<div class="pin" style="left:${x}%;top:${y}%">${chips.join('')}</div>` : '';
   }).join('');

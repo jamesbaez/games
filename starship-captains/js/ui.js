@@ -468,11 +468,10 @@ function techAskHtml(s, p, f) {
 // so you need to see it before choosing a slot - not after.
 const ICON = { rep: '\ud83d\udd27', med: '\ud83c\udf96', mov: '\u27a1\ufe0f' };
 
-// Your tech-slot board. Only the edges that FACE each other can ever pay out, so the
-// outer edges of the first and last slot are left off - they match nothing, ever.
-// Between each pair of slots all three connectors are listed, present or not, because
-// the question you are answering is "would a card with this icon match here?" and you
-// cannot answer it from a list of the icons that happen to exist.
+// Your tech-slot board, laid out left to right like the physical component: slots side
+// by side with the three connectors between each pair, on fixed rows, so a match reads
+// as two filled dots facing each other on the same row. Only facing edges can ever pay,
+// so the outer edges of the first and last slot are left off - they match nothing.
 function techSlotsHtml(s, p, mine) {
   const side = (i, k) => {
     const t = p.techSlots[i].tech;
@@ -480,37 +479,40 @@ function techSlotsHtml(s, p, mine) {
   };
   const slot = (sl, i) => {
     const d = sl.tech && techDef(sl.tech);
-    const body = d
-      ? `<b>${esc(d.name)}</b> ${pic('techs/' + sl.tech)}${sl.art ? ' <span class="tag">⬢ artifact</span>' : ''}
-         ${d.text ? `<div class="muted">${esc(d.text)}</div>` : ''}
-         ${d.room ? `<div class="tag room-${d.room}">Room: ${esc(fxText(d.fx))}</div>` : ''}`
-      : `<span class="muted">${sl.dmg ? 'damaged — repair before using' : 'empty'}</span>`;
     return `<div class="tslot${sl.dmg ? ' dmg' : ''}">
-      <div class="muted">Slot ${i + 1}${sl.dmg ? ' 💥' : ''}</div>${body}</div>`;
+      <div class="muted">Slot ${i + 1}${sl.dmg ? ' 💥' : ''}</div>
+      ${d ? `<b>${esc(d.name)}</b> ${pic('techs/' + sl.tech)}${sl.art ? '<div class="tag">⬢</div>' : ''}`
+          : `<span class="muted">${sl.dmg ? 'damaged' : 'empty'}</span>`}</div>`;
   };
-  // The connectors between slot i and slot i+1: slot i's right edge facing i+1's left.
+  // Between slot i and i+1: slot i's right edge facing slot i+1's left edge.
   const junction = (i) => {
     const L = side(i, 'R');
     const R = side(i + 1, 'L');
-    const rows = D.BONUS_ICONS.map((ic) => {
-      const l = L.includes(ic);
-      const r = R.includes(ic);
-      const hit = l && r;
-      return `<div class="jrow${hit ? ' live' : ''}">
-        <span class="dotl">${l ? '●' : '·'}</span>
+    return `<div class="junction">${D.BONUS_ICONS.map((ic) => {
+      const hit = L.includes(ic) && R.includes(ic);
+      return `<div class="jrow${hit ? ' live' : ''}" title="${esc(bonusName(ic))}">
+        <span class="dotl">${L.includes(ic) ? '●' : '·'}</span>
         <span class="jic">${ICON[ic]}</span>
-        <span class="dotr">${r ? '●' : '·'}</span>
-        <span class="muted">${hit ? `pays ${esc(bonusName(ic))}` : ''}</span></div>`;
-    }).join('');
-    return `<div class="junction">${rows}</div>`;
+        <span class="dotr">${R.includes(ic) ? '●' : '·'}</span></div>`;
+    }).join('')}</div>`;
   };
-  const parts = p.techSlots.map((sl, i) =>
+  const strip = p.techSlots.map((sl, i) =>
     slot(sl, i) + (i < p.techSlots.length - 1 ? junction(i) : '')).join('');
+  // The cards' own wording would make the boxes far too tall, so it goes underneath.
+  const notes = p.techSlots.map((sl, i) => {
+    const d = sl.tech && techDef(sl.tech);
+    if (!d) return '';
+    return `<div class="slotnote"><b>${i + 1}. ${esc(d.name)}</b>
+      ${d.text ? `<span class="muted">${esc(d.text)}</span>` : ''}
+      ${d.room ? `<span class="tag room-${d.room}">Room: ${esc(fxText(d.fx))}</span>` : ''}
+      ${d.discard ? `<span class="muted">Discard to: ${esc(fxText(d.discard))}</span>` : ''}</div>`;
+  }).join('');
   const pairs = countIconPairs(p);
   return `<h3>Tech slots ${pic('slotboard')}</h3>
-    <div class="slotboard">${parts}</div>
-    ${mine ? `<p class="muted">A connector pays out only when the <b>same</b> icon sits on both
-      facing edges (●&nbsp;●). ${pairs} matching pair${pairs === 1 ? '' : 's'} right now;
+    <div class="slotstrip">${strip}</div>
+    ${notes}
+    ${mine ? `<p class="muted">A connector pays out only where the <b>same</b> row is filled on
+      both facing edges (●&nbsp;●). ${pairs} matching pair${pairs === 1 ? '' : 's'} right now;
       pairs also score if you hold Starship Schematics.</p>` : ''}`;
 }
 

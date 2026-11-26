@@ -161,14 +161,20 @@ table.ship td { padding: 3px 6px; }
 .turn-moves > div { display: flex; justify-content: space-between; align-items: center;
   gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
 
-/* The tech-slot board: slots stacked, with the three connectors drawn between them. */
-.slotboard { margin: 6px 0; }
-.slotboard .tslot { flex: none; }
-.slotboard .tslot.dmg { background: #3a1e1e; }
-.junction { margin: 3px 0 3px 18px; padding: 3px 6px; border-left: 3px solid var(--line); }
-.jrow { display: flex; align-items: center; gap: 6px; font-size: 12px; opacity: .55; }
-.jrow.live { opacity: 1; font-weight: 600; }
-.dotl, .dotr { min-width: 12px; text-align: center; }
-.jrow.live .dotl, .jrow.live .dotr { color: var(--accent); }
-.jic { min-width: 18px; text-align: center; }
+/* The tech-slot board, laid out like the component: slots left to right, the three
+   connectors between each pair on fixed rows so facing edges line up. Scrolls sideways
+   on a phone rather than reflowing, because the row alignment IS the information. */
+.slotstrip { display: flex; align-items: stretch; overflow-x: auto; gap: 0;
+  padding-bottom: 4px; margin: 6px 0; }
+.slotstrip .tslot { flex: 0 0 116px; font-size: 12px; border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px; }
+.slotstrip .tslot.dmg { background: #3a1e1e; }
+.junction { flex: 0 0 52px; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.jrow { display: flex; align-items: center; justify-content: center; gap: 1px;
+  font-size: 11px; opacity: .45; }
+.jrow.live { opacity: 1; background: rgba(240, 180, 41, .18); border-radius: 3px; }
+.dotl, .dotr { min-width: 9px; text-align: center; }
+.jrow.live .dotl, .jrow.live .dotr { color: var(--accent); font-weight: 700; }
+.jic { min-width: 16px; text-align: center; }
+.slotnote { font-size: 12px; padding: 3px 0; border-bottom: 1px solid var(--line); }
 .missionrow { border-bottom: 1px solid var(--line); padding: 6px 0; }

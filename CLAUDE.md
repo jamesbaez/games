@@ -12,6 +12,7 @@ A personal repo of browser versions of board games, so the owner and a friend ca
 | Game | Folder | Status |
 |---|---|---|
 | Drillers (Czech Games Edition, 2026) | `drillers/` | Playable. Unofficial fan implementation. Online 2-player via game code (live or slow, moves saved in Firebase, with chat), plus pass & play. The engine supports 1–4 players; there is no solo bot. |
+| Starship Captains (Czech Games Edition, 2022) | `starship-captains/` | Playable, not yet played on real phones. Unofficial fan implementation, same architecture as Drillers. Online via game code plus pass & play, with chat and undo. The engine supports 1–4 players; only the 1–3 player board side is transcribed, and there is no solo mode. |
 
 "It doesn't have to be pretty." The UI is deliberately utilitarian and phone-first.
 
@@ -20,9 +21,11 @@ A personal repo of browser versions of board games, so the owner and a friend ca
 ```
 index.html              list of games (link each new game here)
 README.md
+firebase.rules.json     Realtime Database rules for BOTH games (paste into the Firebase
+                        console when they change). Drillers is at the root; Starship
+                        Captains lives under captains/ so room codes can never collide.
 drillers/
   index.html            loads js/ui.js
-  firebase.rules.json   Realtime Database rules (paste into the Firebase console when they change)
   css/style.css
   js/data.js            ALL game content: cards, tiles, floor cards, board numbers
   js/engine.js          pure rules engine (no DOM)
@@ -33,6 +36,7 @@ drillers/
   test/online-fuzz.mjs  three UI copies play one online game through test/fake-firebase.mjs
   RULES.md              rules summary + every interpretation the engine makes
   ref/                  GITIGNORED local reference material (see below)
+starship-captains/      same layout; img/ holds the per-card crops the 🖼 buttons load
 ```
 
 ## Commands
@@ -47,6 +51,12 @@ npm run fuzz             # ui-fuzz, then online-fuzz
                          # online-fuzz: 3 devices (2 of them the same player) click and chat for 8 s against a fake database
                          #   that fails writes and drops connections; fails if devices end up disagreeing
                          #   args: node test/online-fuzz.mjs <seconds> <dbUrl>; a real dbUrl also checks its rules
+
+cd starship-captains
+npm test                 # engine unit tests + bot games
+npm run fuzz             # ui-fuzz then online-fuzz, as above but for this game
+                         # every ui-fuzz game must FINISH: a game is exactly 4 rounds,
+                         # so unlike Drillers there is nothing to abandon
 
 # run locally (from the repo root)
 python3 -m http.server 8000   # then open http://localhost:8000/drillers/
@@ -87,6 +97,39 @@ Run both `npm test` and `npm run fuzz` after changing engine, data or UI code.
 - **Links:** `#room=<CODE>` (invite links and ntfy alert clicks) opens that game. `#move=` (pass & play only, the Menu bar's "Move device") packs `{mode:'local', state}` with `packSave` (gzip + base64url, about 3 KB).
 - **Component images:** `pic(path)` renders a 🖼 button with `data-img="img/<path>.webp"`, which opens a full-screen viewer attached to `document.body`, so re-renders don't close it. Crops live in `drillers/img/{cards,floors,tiles}/` plus `board`, `dashboard` and `milestones`, named by the ids in `data.js`.
 
+## Starship Captains architecture
+
+Same shape as Drillers (`data.js` / `engine.js` / `net.js` / `ui.js`, no build step), with
+three deliberate differences, all forced by this game:
+
+- **No card-instance layer.** Every tech, omega, mission and event card is unique, so decks
+  are arrays of def ids. Drillers needs `s.cards[iid] = defId` only because its starting
+  cards repeat.
+- **`fx` is an ordered array, not an object.** The rulebook resolves effects left to right
+  and the order is load-bearing.
+- **`state.pending` is a stack of plain-JSON frames**, run by `pump(s)`, which stops at the
+  first question that needs input; `ask(s)` exposes it to the UI. Drillers' "one action =
+  one committed step" breaks here because mission resolution nests (lines × effects × a
+  commander's second task) and faction advancement recurses. The frames **must stay JSON**:
+  undo replays a turn and compares states with `JSON.stringify`.
+
+Everything else ports over: the engine is pure and deterministic with the RNG in the state,
+`net.js` is the same Firebase-over-REST transport under `captains/` paths, and `ui.js` keeps
+the `#g-*` frame so a move arriving mid-message can't wipe the chat box.
+
+**The board is a list, not a map** — a 14-planet graph is unreadable at phone width. Routes
+from your current planet come first with their colour dots, then the rest sorted by distance.
+
+**Transcription is the risk, not the code.** A re-verification pass against the photos found
+errors on **20 of 50 mission cards** (wrong points, wrong faction tracks, missing lines) and
+on a third of the techs. Two test assertions caught most of it and are worth keeping sharp:
+every `fx` keyword in `data.js` must be one the engine implements, and every planet must have
+exactly one red, one green and one yellow route. **If you transcribe a card, verify it against
+a close crop, not the wide table photo.** `ref/cards.html` is a local click-through of all 50
+mission crops, handy for asking the owner a question about a specific card.
+
+`RULES.md` records every interpretation the engine makes. Read it before changing rules code.
+
 ## Conventions
 
 - Vanilla ES modules only: no bundler, no npm dependencies, no external scripts. The only outside services are Firebase (online games) and ntfy.sh (turn alerts), both over plain `fetch`/`EventSource`.
@@ -95,7 +138,7 @@ Run both `npm test` and `npm run fuzz` after changing engine, data or UI code.
 - A new game gets its own top-level folder with its own `index.html`, linked from the root `index.html`. Don't build shared code until a second game actually needs it.
 - Pushing to `main` updates the live site immediately, possibly while the friend is mid-game. State-shape changes break saved games unless the version is bumped (see above).
 
-## Reference material (`drillers/ref/`, gitignored, local only)
+## Reference material (`drillers/ref/` and `starship-captains/ref/`, gitignored, local only)
 
 - `photos-hires/`: the owner's full-resolution photos of every card, tile, floor card, the main board, the player dashboard and the milestone tokens. `data.js` was transcribed from these.
   - IMG_7399: starting floor cards
@@ -111,7 +154,12 @@ Run both `npm test` and `npm run fuzz` after changing engine, data or UI code.
 - `rulebook/Drillers_rulebook_EN_2026-05-21.pdf`: the official English rulebook, also at https://filemanager.czechgames.com/storage/files/drillers/rules/Drillers_rulebook_EN_2026-05-21.pdf
 - `press-kit/`: CGE press renders of the components.
 
-Never commit anything from `ref/`. The files are large and contain the publisher's copyrighted art. The exception is `drillers/img/`: small per-component crops made from these files. The owner chose to publish those so the in-game 🖼 buttons work on the live site.
+Starship Captains has its own `ref/` of the same kind: `photos-hires/Starship/` (board,
+ship boards, tracks, tiles, tokens, and the 50 missions / 50 techs / 12 omega / events),
+`rulebook/`, plus `cards.html` + `cards/` — a local click-through of the mission crops,
+numbered 1-50 in the same order as `MISSIONS` in `data.js`.
+
+Never commit anything from `ref/`. The files are large and contain the publisher's copyrighted art. The exception is the `img/` folders: small per-component crops made from these files. The owner chose to publish those so the in-game 🖼 buttons work on the live site. `scratchpad/crops.sh` style scripts rebuild them from `ref/`; the crops are checked in, the photos are not.
 
 ## Git
 
@@ -132,3 +180,17 @@ Never commit anything from `ref/`. The files are large and contain the publisher
 - An advanced card's Buy button stays enabled without a battery tile; the engine rejects it with a message.
 - Some choices are made automatically: Toys R' Rust burns the cheapest stored mineral.
 - Bot simulations run long (~35 turns per player), but the bots are dumb, so this isn't a real pacing signal.
+
+**Starship Captains (as of 2026-11-25):**
+
+- Playable pass & play and online, with chat and undo. Tested with `npm test`, both fuzzers,
+  and the online fuzz against the fake database — **never on a real phone, and never played
+  by two humans.** ntfy alerts have not been received on a real device for this game.
+- The owner must paste the updated root `firebase.rules.json` into the Firebase console
+  before online play works; until then online games 401.
+- Seven techs sit in their slots doing nothing: Oil Bath, Hull Plating, the Holodeck, and
+  the four discard-to-use cards. They need an action for using an installed tech.
+- Solo mode and the 4-player board side are not implemented.
+- Interpretations the engine makes are listed in `starship-captains/RULES.md`; the ones most
+  likely to be wrong are the mission lines that resolve without asking, and how events
+  resolve themselves for the player whose turn it isn't.

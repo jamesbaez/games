@@ -928,14 +928,42 @@ function eventPic(s, t, ev) {
   return tech ? ` — ${esc(techDef(tech).name)} ${pic('techs/' + tech)}` : '';
 }
 
-function tracksHtml(s) {
+// A faction track drawn from the data: 13 spaces, each with its bonus, its points zone
+// and whoever is standing on it. Drawn rather than photographed so a marker can never sit
+// on the wrong space - the photo of the side in play is one tap away for the real thing.
+const TRACK_GLYPH = {
+  medal: '\u{1F396}', artifact: '\u2b22', repair: '\u{1F527}', android: '\u{1F916}',
+  cadet: '\u{1F9D1}', techR: '\u267b\ufe0f', tech: '\u267b\ufe0f', queue: '\u2b05\ufe0f',
+};
+const glyphFor = (fx) => fx.map((tok) => {
+  const [k, n] = Array.isArray(tok) ? tok : [tok, 1];
+  const g = TRACK_GLYPH[k] ?? '\u2726';
+  return n > 1 ? `${g}\u00d7${n}` : g;
+}).join(' ');
+
+function trackStripHtml(s, t, side, me) {
+  const cells = [];
+  for (let sp = 0; sp < D.TRACK_LEN; sp++) {
+    const bonus = side.bonus[sp];
+    const on = s.players.filter((q) => q.marks[t].sp === sp);
+    cells.push(`<div class="tsp z${D.TRACK_ZONE_PTS[sp]}${sp === D.EVENT_SPACE ? ' ev' : ''}">
+      <div class="n">${sp}${sp === D.EVENT_SPACE ? ' \u26a1' : ''}</div>
+      <div class="bn" title="${bonus ? esc(fxText(bonus)) : ''}">${bonus ? glyphFor(bonus) : ''}</div>
+      <div class="who">${on.map((q) => `<span class="mk${q === me ? ' me' : ''}" title="${esc(q.name)}">${esc(q.name)}</span>`).join('')}</div>
+    </div>`);
+  }
+  return `<div class="tstrip">${cells.join('')}</div>
+    <p class="muted">Points by zone: spaces 1\u20133 are worth 1, 4\u20136 are 2, 7\u20139 are 3, 10\u201312 are 4.
+      \u26a1 space ${D.EVENT_SPACE} fires the event. A lap is worth ${D.TRACK_LOOP_PTS}.</p>`;
+}
+
+function tracksHtml(s, me) {
   return D.FACTIONS.map((fa, t) => {
     const side = fa.sides.find((x) => x.id === s.tracks[t].side);
     const ev = s.tracks[t].event && D.eventDef(s.tracks[t].event);
     return `<div class="track">
-      <b>${esc(fa.name)}</b> <span class="muted">(${esc(side.id)})</span>
-      <div>${s.players.map((q) => `${esc(q.name)} ${q.marks[t].sp}`).join(' · ')}</div>
-      <div class="muted">Bonuses: ${Object.entries(side.bonus).map(([sp, fx]) => `${sp}: ${esc(fxText(fx))}`).join(' · ')}</div>
+      <b>${esc(fa.name)}</b> <span class="muted">(side ${esc(side.id.slice(-1))})</span> ${pic('tracks/' + side.id)}
+      ${trackStripHtml(s, t, side, me)}
       <div class="muted">Event space ${D.EVENT_SPACE}: ${ev ? esc(ev.name) : '<i>already resolved</i>'}${ev ? eventPic(s, t, ev) : ''}</div>
       ${ev ? `<div class="muted">${esc(ev.text)}</div>` : ''}</div>`;
   }).join('');
@@ -1041,7 +1069,7 @@ function renderGame() {
     <h2>Tech board</h2>
     ${techBoardHtml(s)}
     <h2>Faction tracks</h2>
-    ${tracksHtml(s)}`;
+    ${tracksHtml(s, me)}`;
   for (const [k, html] of Object.entries(parts)) document.getElementById(`g-${k}`).innerHTML = html;
 }
 

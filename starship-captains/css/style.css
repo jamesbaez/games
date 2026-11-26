@@ -42,6 +42,11 @@ label { display: block; margin-top: 8px; }
 
 .layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 @media (min-width: 900px) { .layout { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); } }
+/* On a phone the two columns stack. Your own ship and this turn's buttons are what you
+   touch every turn, so they come first; the galaxy, log and chat sit below. Side by side
+   on a wide screen, the original left-to-right order is restored. */
+.layout > .col:last-child { order: -1; }
+@media (min-width: 900px) { .layout > .col:last-child { order: 0; } }
 
 .mine { display: flex; flex-direction: column; gap: 3px; }
 .floor { display: flex; gap: 8px; background: var(--panel); border-radius: 6px; padding: 6px 8px; align-items: flex-start; }

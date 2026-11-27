@@ -1183,3 +1183,21 @@ test('drawing 3 omega cards offers omega cards, and may replace a tech', () => {
   for (const id of f.pool) assert.ok(D.OMEGA.some((o) => o.id === id), `${id} is an omega card`);
   assert.ok(techSlotChoices(out.players[out.current], f).includes(2), 'an occupied slot can be replaced');
 });
+
+test('"but don\'t gain tech bonuses" is the recycling icon, so it may replace a tech', () => {
+  // Rulebook p. 11: the blue chip is plain research; the round gear with arrows is
+  // "Recycling a Tech Slot". All three of these missions print the gear.
+  const bonusless = D.MISSIONS.filter((m) => JSON.stringify(m).includes('techNB')).map((m) => m.id).sort();
+  assert.deepEqual(bonusless, ['dormant_lab', 'experimental_research', 'first_contact']);
+
+  const g = newGame();
+  const p = g.players[g.current];
+  g.tech.row[0] = 'fleet_comms';
+  p.techSlots.forEach((sl) => { sl.tech = 'jump_drive'; sl.dmg = false; });
+  g.pending = [{ k: 'fx', fx: ['techNB'], i: 0 }];
+  const out = pump(g) ?? g;
+  const f = ask(out);
+  assert.equal(f.q, 'tech');
+  assert.ok(f.noBonus, 'no edge bonuses');
+  assert.ok(techSlotChoices(out.players[out.current], f).length, 'a full tech board is still a legal target');
+});

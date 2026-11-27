@@ -115,6 +115,10 @@ because you cannot un-see it.
   copy count, because the edges are what the tech-slot bonuses read.
 - **Tech bonuses.** When a tech goes into a slot, any edge icon matching the facing edge of
   the neighbouring slot or card pays out at once, resolved repair → medal → move.
+- **"But don't gain tech bonuses."** The three missions that say this (Experimental
+  Research, Awaken the Dormant Lab, First Contact) print the **round gear with arrows**,
+  which is the *recycling* icon (rulebook p. 11), not the blue research chip. So the tech
+  may replace one already installed; the only thing given up is the edge bonuses.
 
 ## Excess damage and repairs
 

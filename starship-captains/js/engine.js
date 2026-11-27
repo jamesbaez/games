@@ -553,8 +553,10 @@ function resolveToken(s, p, tok) {
     case 'anyTrack1x2': push(s, { k: 'fx', fx: [['anyTrack', 1], ['anyTrack', 1]], i: 0 }); break;
     case 'event': /* resolved by stepTrack when it lands on EVENT_SPACE */ break;
     case 'tech': case 'techR': askFor(s, 'tech', { recycle: k === 'techR' }); break;
-    // Three missions research a tech "but don't gain tech bonuses".
-    case 'techNB': askFor(s, 'tech', { noBonus: true }); break;
+    // Three missions research a tech "but don't gain tech bonuses". The icon they print
+    // is the round gear with arrows - the RECYCLING one (rulebook p. 11) - so the tech may
+    // also replace one already installed; only the edge bonuses are given up.
+    case 'techNB': askFor(s, 'tech', { noBonus: true, recycle: true }); break;
     // Intergalactic Barbecue advances "without gaining bonuses": the marker moves, but
     // any bonus space it lands on or passes through is skipped.
     case 'anyTrackNB': askFor(s, 'track', { n, noBonus: true }); break;

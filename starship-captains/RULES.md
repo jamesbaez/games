@@ -120,6 +120,14 @@ because you cannot un-see it.
   which is the *recycling* icon (rulebook p. 11), not the blue research chip. So the tech
   may replace one already installed; the only thing given up is the edge bonuses.
 
+### Station tiles read left to right, apex down
+
+The triangular tiles are upright with the **apex pointing down** - the orientation that
+makes the numbered tiles' digits read the right way up. Held that way, the **Blue
+Station** shows the wrench to the *left* of the artifact, so the repair resolves first and
+frees a cargo slot before the artifact is drawn into it. The **Home Station**'s three
+arrows read magenta (Cooperative), gold (Tincan), then black (Ni'an).
+
 ## Excess damage and repairs
 
 Excess damage sits on top of cargo slots that are already full, so no cargo slot can be

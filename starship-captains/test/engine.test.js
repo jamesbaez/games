@@ -1201,3 +1201,20 @@ test('"but don\'t gain tech bonuses" is the recycling icon, so it may replace a 
   assert.ok(f.noBonus, 'no edge bonuses');
   assert.ok(techSlotChoices(out.players[out.current], f).length, 'a full tech board is still a legal target');
 });
+
+test('the Blue Station repairs before it draws the artifact', () => {
+  // Upright (apex down) the wrench is left of the artifact, and effects resolve left to
+  // right - so a full hold is cleared by one before the other arrives.
+  assert.deepEqual(D.STATION_TILES.find((t) => t.id === 'blue').fx, [['repair', 1], ['artifact', 1]]);
+
+  const s = newGame();
+  const p = s.players[s.current];
+  p.cargo = p.cargo.map(() => ({ t: 'dmg' }));
+  p.cargo[0] = { t: 'pir' };
+  s.pending = [{ k: 'fx', fx: D.STATION_TILES.find((t) => t.id === 'blue').fx, i: 0 }];
+  let g = pump(s) ?? s;
+  assert.equal(ask(g).q, 'repair', 'the repair comes first');
+  g = act(g, { type: 'choose', opt: { zone: 'cargo', i: 1 } });
+  assert.equal(ask(g), null, 'the artifact lands in the slot the repair just freed');
+  assert.ok(g.players[g.current].cargo.some((c) => c?.t === 'art'), 'the artifact is aboard');
+});

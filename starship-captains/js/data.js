@@ -225,9 +225,13 @@ export const routeBetween = (a, b) =>
 export const NUMBERED_TILES = 5;
 export const STATION_TILES = [
   { id: 'gold', name: 'Gold Station', fx: ['android'] },
-  { id: 'blue', name: 'Blue Station', fx: [['artifact', 1], ['repair', 1]] },
-  // The purple tile is Home Station's: 1 step on each of the three faction tracks.
-  { id: 'home', name: 'Home Station', home: true, fx: [['tincan', 1], ['nian', 1], ['coop', 1]] },
+  // Upright (apex down, like the numbered tiles) the wrench is LEFT of the artifact, and
+  // effects resolve left to right - so the repair frees a cargo slot before the artifact
+  // is drawn into it.
+  { id: 'blue', name: 'Blue Station', fx: [['repair', 1], ['artifact', 1]] },
+  // The purple tile is Home Station's: 1 step on each of the three faction tracks. Read
+  // left to right, top row first: magenta (Cooperative), gold (Tincan), black (Ni'an).
+  { id: 'home', name: 'Home Station', home: true, fx: [['coop', 1], ['tincan', 1], ['nian', 1]] },
 ];
 // Of the 13 planets, 7 start with a tile and 6 start with a mission.
 export const SETUP_TILED_PLANETS = 7;

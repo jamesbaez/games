@@ -243,3 +243,13 @@ tr.at > td { background: rgba(240, 180, 41, .12); }
 .chip.st.used { opacity: .5; }
 .tag.bounty { background: #7f1d1d; color: #fff; }
 .chip.bounty { background: #7f1d1d; }
+
+/* Pirates drawn on the board picture: a line between the two planets, skull in the middle. */
+.plines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.plines line { stroke: #e05d5d; stroke-width: .5; stroke-dasharray: 2 1.5; opacity: .85; vector-effect: non-scaling-stroke; }
+.pskull {
+  position: absolute; transform: translate(-50%, -50%);
+  background: #7f1d1d; color: #fff; border: 1px solid rgba(255, 255, 255, .6);
+  border-radius: 50%; width: 18px; height: 18px; line-height: 16px; text-align: center;
+  font-size: 11px;
+}

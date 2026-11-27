@@ -677,9 +677,38 @@ function mapHtml(s, p) {
     return chips.length ? `<div class="pin" style="left:${x}%;top:${y}%">${chips.join('')}</div>` : '';
   }).join('');
   return `<details ${keepOpen('map')}><summary>Board picture</summary>
-    <div class="galaxy"><img src="img/board.webp" alt="The galaxy">${pins}</div>
-    <p class="muted">Tap a marker for the card. Pirates are listed below, not drawn \u2014 the routes curve too much to mark reliably.</p>
+    <div class="galaxy"><img src="img/board.webp" alt="The galaxy">${pirateOverlay(s)}${pins}</div>
+    <p class="muted">Tap a marker for the card. A \u2620 sits on a straight line between the two planets it blocks,
+      which is not the curve printed on the board \u2014 the line shows which route it is. The list below says what kind.</p>
   </details>`;
+}
+
+// Pirates on the map. The printed routes curve so much that a marker placed at a straight
+// midpoint can land on a different planet, so instead of guessing where the curve goes the
+// overlay draws its own straight line between the two planets and puts the skull on that.
+// The line is what makes the route unambiguous; it is not pretending to be the printed one.
+function pirateOverlay(s) {
+  const here = s.pirates.map((tok, i) => (tok ? { tok, r: D.ROUTES[i] } : null)).filter(Boolean);
+  if (!here.length) return '';
+  const lines = [];
+  const skulls = [];
+  for (const { tok, r } of here) {
+    const [ax, ay] = D.MAP[r.a];
+    const [bx, by] = D.MAP[r.b];
+    // The skull sits ON the line, so it always reads as belonging to it. The midpoint is
+    // first choice, but some straight lines pass over a third planet (Green-Rust runs right
+    // through Frost), so slide along the line and keep the spot furthest from every other
+    // planet rather than pushing the skull sideways off its own line.
+    const others = Object.entries(D.MAP).filter(([id]) => id !== r.a && id !== r.b).map(([, xy]) => xy);
+    const clearance = (x, y) => Math.min(...others.map(([px, py]) => Math.hypot(px - x, py - y)));
+    const at = (t) => [ax + (bx - ax) * t, ay + (by - ay) * t];
+    const [mx, my] = clearance(...at(0.5)) >= 7 ? at(0.5)
+      : [0.38, 0.62, 0.3, 0.7, 0.25, 0.75, 0.5].map(at).sort((u, v) => clearance(...v) - clearance(...u))[0];
+    const title = `Pirate between ${esc(locName(r.a))} and ${esc(locName(r.b))}: ${esc(pirate(tok))}`;
+    lines.push(`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}"><title>${title}</title></line>`);
+    skulls.push(`<div class="pskull" style="left:${mx}%;top:${my}%" title="${title}">\u2620</div>`);
+  }
+  return `<svg class="plines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines.join('')}</svg>${skulls.join('')}`;
 }
 
 // Every station on a planet, tile out or not. An event can leave a bounty on a station,

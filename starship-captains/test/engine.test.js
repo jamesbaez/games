@@ -1045,6 +1045,7 @@ test('every card the UI offers a picture for has one on disk', () => {
   }
   for (const t of D.STATION_TILES) assert.ok(has(`tiles/st_${t.id}`), `station tile ${t.id}`);
   for (const f of D.FACTIONS) for (const side of f.sides) assert.ok(has(`tracks/${side.id}`), `track side ${side.id}`);
+  for (const r of D.PIRATE_REWARDS) assert.ok(has(`tokens/pirate_${r === 'android' ? 'android' : 'medalart'}`), `pirate token ${r}`);
   // The Tincan event is the tech on its track, not a card, so it has no crop of its own.
   for (const e of D.EVENTS.filter((e) => e.id !== 'tincan_tech')) {
     assert.ok(has(`events/${e.id}`), `event crop ${e.id}`);

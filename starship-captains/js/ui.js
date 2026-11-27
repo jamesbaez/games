@@ -446,6 +446,9 @@ function whatsAt(s, loc) {
 // A pirate token: the exhaust colour decides which route it can ambush onto, and the
 // ship side is face up, so what it pays out is public before you decide to fight it.
 const REWARD = { android: '\ud83e\udd16 android', medalArt: '\ud83c\udf96+\u2b22' };
+const REWARD_GLYPH = { android: '\ud83e\udd16', medalArt: '\ud83c\udf96' };
+// The token's reward side, so you can see what beating it pays before committing.
+const rewardPic = (tok) => `img/tokens/pirate_${tok.reward === 'android' ? 'android' : 'medalart'}.webp`;
 const pirate = (tok) => (tok ? `\u2620 ${tok.c} (${REWARD[tok.reward] ?? tok.reward})` : '');
 
 const tokenName = (c) => (c?.t === 'art' ? `Artifact ${ART[c.id] ?? ''}` : c?.t === 'pir' ? 'Pirate token ☠' : 'Damage');
@@ -704,9 +707,9 @@ function pirateOverlay(s) {
     const at = (t) => [ax + (bx - ax) * t, ay + (by - ay) * t];
     const [mx, my] = clearance(...at(0.5)) >= 7 ? at(0.5)
       : [0.38, 0.62, 0.3, 0.7, 0.25, 0.75, 0.5].map(at).sort((u, v) => clearance(...v) - clearance(...u))[0];
-    const title = `Pirate between ${esc(locName(r.a))} and ${esc(locName(r.b))}: ${esc(pirate(tok))}`;
+    const title = `Pirate between ${esc(locName(r.a))} and ${esc(locName(r.b))}: ${esc(pirate(tok))}. Fighting it costs 1 damage.`;
     lines.push(`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}"><title>${title}</title></line>`);
-    skulls.push(`<div class="pskull" style="left:${mx}%;top:${my}%" title="${title}">\u2620</div>`);
+    skulls.push(`<button class="pskull" style="left:${mx}%;top:${my}%" data-img="${rewardPic(tok)}" title="${title}">\u2620${REWARD_GLYPH[tok.reward] ?? ''}</button>`);
   }
   return `<svg class="plines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines.join('')}</svg>${skulls.join('')}`;
 }
@@ -785,7 +788,7 @@ function piratesHtml(s) {
       const { a, b } = D.ROUTES[i];
       const d = Math.min(dist[a] ?? 99, dist[b] ?? 99);
       return { d, html: `<tr><td>${esc(locName(a))} – ${esc(locName(b))}</td>
-        <td>${esc(pirate(tok))}</td>
+        <td>${esc(pirate(tok))} <button class="small secondary pic" data-img="${rewardPic(tok)}" title="Picture">\ud83d\uddbc</button></td>
         <td>${here.has(i) ? '<span class="tag">from here</span>' : `<span class="muted">${d} jump${d === 1 ? '' : 's'} away</span>`}</td></tr>` };
     })
     .sort((x, y) => x.d - y.d).map((r) => r.html).join('');

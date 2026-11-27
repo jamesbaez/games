@@ -250,6 +250,6 @@ tr.at > td { background: rgba(240, 180, 41, .12); }
 .pskull {
   position: absolute; transform: translate(-50%, -50%);
   background: #7f1d1d; color: #fff; border: 1px solid rgba(255, 255, 255, .6);
-  border-radius: 50%; width: 18px; height: 18px; line-height: 16px; text-align: center;
-  font-size: 11px;
+  border-radius: 9px; height: 18px; line-height: 16px; padding: 0 3px;
+  font-size: 11px; white-space: nowrap; cursor: pointer;
 }

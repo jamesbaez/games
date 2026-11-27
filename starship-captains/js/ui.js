@@ -1118,11 +1118,11 @@ function renderGame() {
   if (!document.getElementById('g-top')) {
     app.innerHTML = `<div id="g-top"></div>
       <div class="layout">
-        <section class="col"><div id="g-mine"></div>${online ? `
+        <section class="col" id="g-mine"></section>
+        <section class="col"><div id="g-side"></div>${online ? `
           <h2>Chat</h2>
           <form id="chat" class="chat"><input id="chat-text" maxlength="500" autocomplete="off" enterkeyhint="send" placeholder="Message"><button>Send</button></form>
           <div id="g-chat"></div>` : ''}</section>
-        <section class="col" id="g-side"></section>
       </div>`;
   }
   const parts = {};
@@ -1142,17 +1142,14 @@ function renderGame() {
       ${message ? `<div class="alert">${esc(message)}</div>` : ''}
     </div>
     ${myTurn ? askHtml(s, me) : ''}`;
-  // The galaxy sits between your ship and everyone else's, so an opponent's board can't be
-  // mistaken for your own at a glance - on a phone these are one column, in this order.
+  // On a phone these stack in this order, so what you plan from - the galaxy and the
+  // faction tracks - sits directly under the turn line, then your own ship, and only then
+  // everyone else's. An opponent's board below yours can't be mistaken for your own.
   parts.mine = `
     <h2>The galaxy ${pic('board')}</h2>
     ${boardHtml(s, me, myTurn)}
     <h2>Faction tracks</h2>
-    ${tracksHtml(s, me)}
-    ${others.map((o) => `<section class="them"><h2>${esc(o.name)} <span class="muted">(opponent)</span></h2>${shipHtml(s, o, false)}</section>`).join('')}
-    ${!s.over ? `<details ${keepOpen('score')}><summary>Current score</summary>${scoresHtml(s)}</details>` : ''}
-    <h2>Log</h2>
-    <div class="log">${s.log.slice().reverse().map((l) => `<div>${esc(l)}</div>`).join('')}</div>`;
+    ${tracksHtml(s, me)}`;
   if (online) parts.chat = chatHtml(s, seat);
   parts.side = `
     <h2>${esc(me.name)} (you) ${pic('dashboard')}</h2>
@@ -1160,7 +1157,11 @@ function renderGame() {
     ${myTurn ? actionsHtml(s, me) : ''}
     ${myTurn ? turnHtml(s, me) : ''}
     <h2>Tech board</h2>
-    ${techBoardHtml(s)}`;
+    ${techBoardHtml(s)}
+    ${others.map((o) => `<section class="them"><h2>${esc(o.name)} <span class="muted">(opponent)</span></h2>${shipHtml(s, o, false)}</section>`).join('')}
+    ${!s.over ? `<details ${keepOpen('score')}><summary>Current score</summary>${scoresHtml(s)}</details>` : ''}
+    <h2>Log</h2>
+    <div class="log">${s.log.slice().reverse().map((l) => `<div>${esc(l)}</div>`).join('')}</div>`;
   for (const [k, html] of Object.entries(parts)) document.getElementById(`g-${k}`).innerHTML = html;
 
   // A new question can appear anywhere in a turn - after a mission line, a track bonus, a

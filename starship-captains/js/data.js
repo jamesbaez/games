@@ -356,7 +356,9 @@ export const TECHS = [
   t('auction_terminal', 'Auction Terminal', ['rep'], ['rep'], { room: 'r', fx: [{ pay: 'pirateTok', then: [['anyTrack', 2], ['artifact', 1]] }] }),
   t('trash_compactor', 'Trash Compactor', ['med', 'mov'], ['med', 'mov'], { room: 'y', fx: [{ pay: 'pirateTok', then: ['move', 'move', ['tincan', 1]] }] }),
   t('matter_converter', 'Matter Converter', ['rep', 'med'], ['rep', 'med'], { room: 'y', fx: [{ pay: 'pirateTok', then: [['artifact', 1], 'move', 'move'] }] }),
-  t('tincan_assembly_line', 'Tincan Assembly Line', ['rep', 'mov'], ['med'], { room: 'r', fx: [{ pay: 'artifact', then: ['cadet', ['repair', 1]] }] }),
+  // The figure it hands out is the olive robot with round eyes - an ANDROID, the same icon
+  // the Gold Station prints - not the plain grey cadet figure.
+  t('tincan_assembly_line', 'Tincan Assembly Line', ['rep', 'mov'], ['med'], { room: 'r', fx: [{ pay: 'artifact', then: ['android', ['repair', 1]] }] }),
   // -- beta --------------------------------------------------------------------------
   t('quantum_torpedoes', 'Quantum Torpedoes', [], ['rep', 'mov'], { discard: [['fight', 2], 'ignoreDamage1'] }),
   t('quantum_torpedoes_m', 'Quantum Torpedoes', ['rep', 'mov'], [], { discard: [['fight', 2], 'ignoreDamage1'] }),

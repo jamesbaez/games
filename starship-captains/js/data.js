@@ -427,7 +427,7 @@ export const MISSIONS = [
   ms('younglings', 'Saving Younglings', 6, [L('r', ['anyTrack', 1]), L('y', ['medal', 1])]),
   ms('assembly_required', 'Assembly Required', 4, [L('b', ['tincan', 3]), L('b', { pay: 'artifact', then: ['android'] })]),
   ms('artifact_guardians', 'Artifact Guardians', 7, [L('y', ['damage', 1], ['anyTrack', 1], ['artifact', 1]), L('y', ['damage', 1], ['anyTrack', 1], ['artifact', 1])]),
-  ms('secret_plans', 'Steal Secret Plans', 2, [L('y', ['nian', 1], ['medal', 1]), L('gold', 'drawTech3')]),
+  ms('secret_plans', 'Steal Secret Plans', 2, [L('y', ['nian', 1], ['medal', 1]), L('gold', 'drawOmega3')]),
   ms('ancient_puzzle', 'Ancient Puzzle', 4, [L('y', ['tincan', 3]), L('b', { either: [[['artifact', 1]], [{ pay: 'artifact', then: [['anyTrack', 2]] }]] })]),
   ms('peace_talks', 'Peace Talks', 3, [L('r', ['nian', 3]), L('r', ['tincan', 3])]),
   ms('escort_ambassador', 'Escort the Ambassador', 3, [L('y', ['damage', 1], ['anyTrack', 3])]),

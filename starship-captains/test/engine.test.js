@@ -1160,3 +1160,26 @@ test('every matching mission line is offered, even a harmless one', () => {
   assert.ok(damageCount(took.players[0]) < damageCount(left.players[0]), 'the repair only happens if taken');
   assert.ok(p, 'sanity');
 });
+
+test('only Steal Secret Plans and the Omega Megacomputer use the omega deck', () => {
+  // Rulebook appendix: "Steal Secret Plans / Omega Megacomputer - These are the only cards
+  // that use the omega deck." Tincan Library draws from the ordinary tech deck.
+  const uses = (defs, kw) => defs.filter((d) => JSON.stringify(d).includes(kw)).map((d) => d.id).sort();
+  assert.deepEqual(uses([...D.MISSIONS, ...D.TECHS, ...D.OMEGA], 'drawOmega3'),
+    ['omega_megacomputer', 'omega_megacomputer_m', 'secret_plans']);
+  assert.deepEqual(uses([...D.MISSIONS, ...D.TECHS, ...D.OMEGA], 'drawTech3'), ['tincan_library']);
+});
+
+test('drawing 3 omega cards offers omega cards, and may replace a tech', () => {
+  const s = newGame();
+  const g = structuredClone(s);
+  const p = g.players[g.current];
+  p.techSlots[2] = { tech: 'jump_drive', dmg: false };
+  g.pending = [{ k: 'fx', fx: ['drawOmega3'], i: 0 }];
+  const out = pump(g) ?? g;
+  const f = ask(out);
+  assert.equal(f.q, 'tech');
+  assert.equal(f.pool.length, 3);
+  for (const id of f.pool) assert.ok(D.OMEGA.some((o) => o.id === id), `${id} is an omega card`);
+  assert.ok(techSlotChoices(out.players[out.current], f).includes(2), 'an occupied slot can be replaced');
+});

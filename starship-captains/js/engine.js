@@ -567,8 +567,11 @@ function resolveToken(s, p, tok) {
       break;
     }
     // Draw a few cards off a deck and research one of them. The rest go to the bottom.
-    case 'drawTech3': askFor(s, 'tech', { pool: drawFrom(s, 'deck', 3) }); break;
-    case 'drawOmega3': askFor(s, 'tech', { pool: drawFrom(s, 'omegaDeck', 3), omega: true }); break;
+    // Both "draw 3 and research one of them" lines print the recycle gear, not the plain
+    // research one, and the appendix confirms it for Steal Secret Plans: "choose 1 - you
+    // may put it in an empty tech slot OR REPLACE AN EXISTING TECH with it."
+    case 'drawTech3': askFor(s, 'tech', { pool: drawFrom(s, 'deck', 3), recycle: true }); break;
+    case 'drawOmega3': askFor(s, 'tech', { pool: drawFrom(s, 'omegaDeck', 3), omega: true, recycle: true }); break;
     // Gateway to the Stars: "Look at the top 3 missions, then move." Information only -
     // the cards stay on the deck in the same order. Where the next mission will be dealt
     // is already public, so knowing what it is tells you where to be.

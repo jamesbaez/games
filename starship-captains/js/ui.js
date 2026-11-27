@@ -679,7 +679,8 @@ function mapHtml(s, p) {
     for (const [sid, st] of stationsAt(s, id)) {
       const def = D.STATION_TILES.find((t) => t.id === sid);
       chips.push(`<button class="chip st ${def.id}${st.out ? '' : ' used'}" data-img="img/tiles/st_${def.id}.webp"
-        title="${esc(def.name)}${st.out ? `: ${esc(fxText(def.fx))}` : ' \u2014 tile used, back next round'}">\u2b22</button>`);
+        title="${esc(def.name)}${st.out ? `: ${esc(fxText(def.fx))}` : ' \u2014 tile used, back next round'}"
+        >${st.out ? '\u2b22' : '\u2b21'}</button>`);
       if (st.bounty) chips.push(`<span class="chip bounty" title="${esc(BOUNTY[st.bounty].help)}">${BOUNTY[st.bounty].chip}</span>`);
     }
     for (const q of s.players.filter((q) => q.at === id)) {
@@ -754,7 +755,8 @@ function spotHtml(s, id) {
     const def = D.STATION_TILES.find((t) => t.id === sid);
     bits.push(st.out
       ? `<span class="tag" title="End your turn here to get: ${esc(fxText(def.fx))}">${esc(def.name)}: ${esc(fxText(def.fx))}</span> ${pic('tiles/st_' + def.id)}`
-      : `<span class="tag used">${esc(def.name)} <span class="muted">\u2014 tile used, back next round</span></span>`);
+      : `<span class="tag used">${esc(def.name)} <span class="usedmark">USED</span>` +
+        ` <span class="muted">back next round</span></span> ${pic('tiles/st_' + def.id)}`);
     if (st.bounty) bits.push(`<span class="tag bounty" title="${esc(BOUNTY[st.bounty].help)}">${BOUNTY[st.bounty].tag}</span>`);
   }
   for (const q of s.players.filter((q) => q.at === id)) bits.push(`<span class="tag">🚀 ${esc(q.name)}</span>`);
@@ -1160,12 +1162,14 @@ function renderGame() {
     ${tracksHtml(s, me)}`;
   if (online) parts.chat = chatHtml(s, seat);
   parts.side = `
-    <h2>${esc(me.name)} (you) ${pic('dashboard')}</h2>
-    ${shipHtml(s, me, true)}
-    ${myTurn ? actionsHtml(s, me) : ''}
-    ${myTurn ? turnHtml(s, me) : ''}
-    <h2>Tech board</h2>
-    ${techBoardHtml(s)}
+    <section class="you">
+      <h2>${esc(me.name)} (you) ${pic('dashboard')}</h2>
+      ${shipHtml(s, me, true)}
+      ${myTurn ? actionsHtml(s, me) : ''}
+      ${myTurn ? turnHtml(s, me) : ''}
+      <h2>Tech board</h2>
+      ${techBoardHtml(s)}
+    </section>
     ${others.map((o) => `<section class="them"><h2>${esc(o.name)} <span class="muted">(opponent)</span></h2>${shipHtml(s, o, false)}</section>`).join('')}
     ${!s.over ? `<details ${keepOpen('score')}><summary>Current score</summary>${scoresHtml(s)}</details>` : ''}
     <h2>Log</h2>

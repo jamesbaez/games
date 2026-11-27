@@ -21,7 +21,7 @@ const RULEBOOK = 'https://czechgames.com/en/starship-captains/';
 const OFFLINE = 'Could not reach the game server. Check your connection and try again.';
 const RELOADING = 'Reloading the game, try again in a moment.';
 
-const openSections = new Set(['turn']);
+const openSections = new Set(['turn', 'map']);
 const keepOpen = (name) => `data-keep="${name}"${openSections.has(name) ? ' open' : ''}`;
 app.addEventListener('toggle', (e) => {
   const name = e.target.dataset?.keep;
@@ -762,6 +762,7 @@ function boardHtml(s, p, myTurn) {
   return `<div class="here"><b>Your ship is at ${esc(locName(p.at))}</b>
       ${s.missions[p.at] ? '' : '<span class="muted"> — no mission here</span>'}</div>
     ${mapHtml(s, p)}
+    <details ${keepOpen('planets')}><summary>Planets (${D.LOCS.length})</summary>
     <table class="board"><thead><tr><th>Planet</th><th>Jumps</th><th></th></tr></thead><tbody>
       ${all.map((id) => {
         const i = here.find((j) => routeEnd(j, p.at) === id);
@@ -771,9 +772,9 @@ function boardHtml(s, p, myTurn) {
           <td>${i !== undefined && s.pirates[i] ? `<span class="tag pir">${esc(pirate(s.pirates[i]))}</span> ` : ''}${spotHtml(s, id).join(' ')}</td></tr>`;
       }).join('')}
     </tbody></table>
+    <p class="muted">${TILE_NOTE}</p></details>
     ${missionsHtml(s)}
     ${piratesHtml(s)}
-    <p class="muted">${TILE_NOTE}</p>
     ${myTurn && !ask(s) && !s.turn.acted ? missionHereHtml(s, p) : ''}`;
 }
 
@@ -1146,6 +1147,8 @@ function renderGame() {
   parts.mine = `
     <h2>The galaxy ${pic('board')}</h2>
     ${boardHtml(s, me, myTurn)}
+    <h2>Faction tracks</h2>
+    ${tracksHtml(s, me)}
     ${others.map((o) => `<section class="them"><h2>${esc(o.name)} <span class="muted">(opponent)</span></h2>${shipHtml(s, o, false)}</section>`).join('')}
     ${!s.over ? `<details ${keepOpen('score')}><summary>Current score</summary>${scoresHtml(s)}</details>` : ''}
     <h2>Log</h2>
@@ -1157,11 +1160,19 @@ function renderGame() {
     ${myTurn ? actionsHtml(s, me) : ''}
     ${myTurn ? turnHtml(s, me) : ''}
     <h2>Tech board</h2>
-    ${techBoardHtml(s)}
-    <h2>Faction tracks</h2>
-    ${tracksHtml(s, me)}`;
+    ${techBoardHtml(s)}`;
   for (const [k, html] of Object.entries(parts)) document.getElementById(`g-${k}`).innerHTML = html;
+
+  // A new question can appear anywhere in a turn - after a mission line, a track bonus, a
+  // pirate - and on a phone its buttons are easy to miss. Scroll to them when the question
+  // itself changes, but not on an unrelated re-render (a chat message, an opponent's move).
+  const key = myTurn ? JSON.stringify(ask(s) ?? null) : null;
+  if (key !== lastAsk) {
+    lastAsk = key;
+    if (key) document.querySelector?.('.ask')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  }
 }
+let lastAsk = null;
 
 function render() {
   if (pendingMove) renderPendingMove();

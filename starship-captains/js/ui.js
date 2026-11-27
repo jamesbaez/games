@@ -709,7 +709,7 @@ function pirateOverlay(s) {
       : [0.38, 0.62, 0.3, 0.7, 0.25, 0.75, 0.5].map(at).sort((u, v) => clearance(...v) - clearance(...u))[0];
     const title = `Pirate between ${esc(locName(r.a))} and ${esc(locName(r.b))}: ${esc(pirate(tok))}. Fighting it costs 1 damage.`;
     lines.push(`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}"><title>${title}</title></line>`);
-    skulls.push(`<button class="pskull" style="left:${mx}%;top:${my}%" data-img="${rewardPic(tok)}" title="${title}">\u2620${REWARD_GLYPH[tok.reward] ?? ''}</button>`);
+    skulls.push(`<button class="pskull" style="left:${mx}%;top:${my}%" data-img="${rewardPic(tok)}" title="${title}">${REWARD_GLYPH[tok.reward] ?? '\u2620'}</button>`);
   }
   return `<svg class="plines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines.join('')}</svg>${skulls.join('')}`;
 }

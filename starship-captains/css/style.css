@@ -249,7 +249,8 @@ tr.at > td { background: rgba(240, 180, 41, .12); }
 .plines line { stroke: #e05d5d; stroke-width: .5; stroke-dasharray: 2 1.5; opacity: .85; vector-effect: non-scaling-stroke; }
 .pskull {
   position: absolute; transform: translate(-50%, -50%);
-  background: #7f1d1d; color: #fff; border: 1px solid rgba(255, 255, 255, .6);
-  border-radius: 9px; height: 18px; line-height: 16px; padding: 0 3px;
-  font-size: 11px; white-space: nowrap; cursor: pointer;
+  background: #ef1b2e; color: #fff; border: 1px solid #fff;
+  border-radius: 50%; width: 19px; height: 19px; line-height: 17px; padding: 0;
+  font-size: 11px; text-align: center; cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .55);
 }

@@ -128,6 +128,10 @@ Station** shows the wrench to the *left* of the artifact, so the repair resolves
 frees a cargo slot before the artifact is drawn into it. The **Home Station**'s three
 arrows read magenta (Cooperative), gold (Tincan), then black (Ni'an).
 
+Everything a station does on the turn you end there - the charge left on it, then the tile
+itself - resolves as **one ordered list**, and the turn does not pass to the next player
+until all of it, including any question it asked, is finished.
+
 ## Excess damage and repairs
 
 Excess damage sits on top of cargo slots that are already full, so no cargo slot can be

@@ -266,6 +266,7 @@ export function pump(s) {
       stepTrack(s, s.players[s.current], f.t, f.noBonus);
       continue;
     }
+    if (f.k === 'endTurn') { s.pending.pop(); finishTurn(s); continue; }
     if (f.k === 'mission') { missionStep(s, f); continue; }
     if (f.k === 'room') {
       // The room's effects are done. A commander now takes a second task; anyone else
@@ -1318,26 +1319,38 @@ function choose(s, p, opt) {
 }
 
 // ---------- turn and round ----------
+// A station fires when you END a turn on its planet, once per round. Everything it does
+// goes into ONE effect list, resolved in order: a question raised by the first effect (no
+// room for the charge's damage) must be answered before the next effect runs. Resolving
+// each station with its own pump() let a later station jump the queue - the Blue Station
+// handed out an artifact that the earlier, still-unanswered damage then threw overboard.
 function endTurn(s) {
   const p = s.players[s.current];
-  // A station tile fires when you END a turn on its planet, once per round.
+  const fx = [];
   for (const st of Object.values(s.stations)) {
     if (st.at !== p.at || !st.bounty) continue;
     const give = st.bounty;
     st.bounty = null;
     if (give === 'medal') { p.medals++; log(s, `${p.name} collects the medal left at the station.`); }
-    else { log(s, `${p.name} sets off the charge left at the station.`); takeDamage(s, p, 1); push(s, { k: 'fx', fx: [['anyTrack', 1]], i: 0 }); }
-    pump(s);
+    else { log(s, `${p.name} sets off the charge left at the station.`); fx.push(['damage', 1], ['anyTrack', 1]); }
   }
   for (const [id, st] of Object.entries(s.stations)) {
     if (st.out && st.at === p.at) {
       const tile = D.STATION_TILES.find((t) => t.id === id);
       st.out = false; // used: it waits on the round track until next round
       log(s, `${p.name} docks at the ${tile.name}.`);
-      push(s, { k: 'fx', fx: tile.fx, i: 0 });
-      pump(s);
+      fx.push(...tile.fx);
     }
   }
+  // This frame sits at the BOTTOM of the stack, so the turn passes to the next player only
+  // once every station effect above it - and every question it asked - has been resolved.
+  // Before, the turn moved on at once and the question was answered by the wrong seat.
+  push(s, { k: 'endTurn' });
+  if (fx.length) push(s, { k: 'fx', fx, i: 0 });
+  pump(s);
+}
+
+function finishTurn(s) {
   refillTech(s);
   s.turn = { acted: false };
   const next = s.players.filter((x) => !x.passed);

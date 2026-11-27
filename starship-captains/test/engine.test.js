@@ -1218,3 +1218,31 @@ test('the Blue Station repairs before it draws the artifact', () => {
   assert.equal(ask(g), null, 'the artifact lands in the slot the repair just freed');
   assert.ok(g.players[g.current].cargo.some((c) => c?.t === 'art'), 'the artifact is aboard');
 });
+
+test('a station resolves in order, and the turn waits for its questions', () => {
+  // The charge's damage comes before the Blue Station's artifact, and with a full hold
+  // the "jettison something" question must be answered before the artifact is handed out
+  // - otherwise the damage throws the artifact straight back overboard.
+  const s = newGame();
+  s.current = 0;
+  const p = s.players[0];
+  p.at = 'home';
+  s.players[1].at = 'crater';
+  s.stations = { blue: { at: 'home', out: true, bounty: 'dmg' } };
+  p.cargo = p.cargo.map(() => ({ t: 'dmg' }));
+  p.cargo[0] = { t: 'pir' };
+  p.turnMoves = undefined;
+  s.turn = { acted: true };
+
+  let g = act(s, { type: 'endTurn' });
+  assert.equal(ask(g).q, 'bump', 'the charge asks first');
+  assert.equal(g.current, 0, 'the turn has not passed while a question is open');
+  g = act(g, { type: 'choose', opt: 0 });            // jettison the pirate for the damage
+  assert.equal(ask(g).q, 'track', "the charge's track step comes next");
+  g = act(g, { type: 'choose', opt: 'coop' });
+  assert.equal(ask(g).q, 'repair', 'then the Blue Station: repair before artifact');
+  g = act(g, { type: 'choose', opt: { zone: 'cargo', i: 1 } });
+  assert.ok(g.players[0].cargo.some((c) => c?.t === 'art'), 'the artifact survives');
+  assert.equal(ask(g), null, 'the station is finished');
+  assert.equal(g.current, 1, 'only now does the turn pass');
+});

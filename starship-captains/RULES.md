@@ -132,6 +132,19 @@ Everything a station does on the turn you end there - the charge left on it, the
 itself - resolves as **one ordered list**, and the turn does not pass to the next player
 until all of it, including any question it asked, is finished.
 
+### "Discard this to:" techs are rooms
+
+INTERPRETATION. Quantum Torpedoes, Time Turner, Omega Megacomputer and Ram Drive print
+"Discard this to:" and carry no `when` clause, but their card frames are in a **crew
+colour** - red, blue, yellow and red - the way every room tech's frame is, and the
+appendix says "even a commander is unable to use the card twice". Both only make sense if
+a crew member works them, so the engine treats them as rooms: activating one resolves the
+printed effect and the card leaves its slot for the discard pile. The card is spent
+*before* its effect, so the Omega Megacomputer's research can use the slot it just vacated.
+
+Ram Drive reads "Take 1 damage **or** discard this to:", the same payoff either way, so
+activating it asks which.
+
 ## Excess damage and repairs
 
 Excess damage sits on top of cargo slots that are already full, so no cargo slot can be
@@ -171,7 +184,7 @@ turning over, or the Gateway peek above.
 - **Solo mode** (Captain Shadow, action cards, passengers). Same call as Drillers.
 - **The 4-player board side.** The engine supports 1–4 seats but only the 1–3 player board
   is transcribed.
-- **Oil Bath, Hull Plating and the Holodeck**, plus the four discard-to-use techs
-  (Quantum Torpedoes, Omega Megacomputer, Ram Drive, Time Turner): these need an action
-  for using an installed tech, which does not exist yet. They sit in slots and pay their
-  edge bonuses, but their printed abilities do nothing.
+- **Oil Bath, Hull Plating and the Holodeck.** These three sit in their slots and pay
+  their edge bonuses, but their printed abilities do nothing: the first two are reactive
+  (`when`) and the Holodeck copies another room. The discard-to-use techs now work - see
+  below.

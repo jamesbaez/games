@@ -533,6 +533,18 @@ function resolveToken(s, p, tok) {
     case 'fight': askFor(s, 'fight'); break;
     case 'fightSafe': askFor(s, 'fight', { safe: true }); break;
     case 'repair': for (let i = 0; i < n; i++) repairOne(s, p); break;
+    // Spend the tech being activated: it leaves its slot for the discard pile. Single-use
+    // by construction, so a commander's second task can no longer see it.
+    case 'discardThis': {
+      const rf = [...s.pending].reverse().find((fr) => fr.k === 'room');
+      const sl = rf?.slot !== undefined ? p.techSlots[rf.slot] : null;
+      if (!sl?.tech) break;
+      const card = sl.tech;
+      sl.tech = null;
+      discardTech(s, card);
+      log(s, `${p.name} spends ${techDef(card).name}.`);
+      break;
+    }
     case 'damage': takeDamage(s, p, n); break;
     case 'medal': p.medals += n; log(s, `${p.name} gains ${n} medal${n > 1 ? 's' : ''}.`); break;
     case 'artifact': drawArtifacts(s, p, n); break;
@@ -850,11 +862,11 @@ function resolveEvent(s, def) {
 export function roomsFor(s, p) {
   const asRoom = (id) => {
     const d = techDef(id);
-    return d?.room ? { id, name: d.name, color: d.room, fx: d.fx ?? [] } : null;
+    return d?.room ? { id, name: d.name, color: d.room, fx: d.fx ?? [], discard: d.discard ?? null } : null;
   };
   const techRooms = p.techSlots.map((sl, i) => {
     const r = sl.tech && asRoom(sl.tech);
-    return r && (sl.art ? { ...r, slot: i } : r);
+    return r && { ...r, slot: i, art: !!sl.art };
   }).filter(Boolean);
   const shared = sharedTech(s) && asRoom(sharedTech(s));
   const basic = D.ROOMS.filter((r) => !p.roomDmg[r.id]);
@@ -866,6 +878,16 @@ export function sharedTech(s) {
   const t = s.tracks.find((x) => x.id === 'tincan');
   return t && t.shared ? t.tech : null;
 }
+
+// What activating a room resolves. A "Discard this to:" tech spends itself for its
+// `discard` effects; a card that offers both (Ram Drive: take the damage, or spend the
+// card) asks which way. The card goes first, so a research effect can use the slot it
+// just vacated.
+const roomFx = (room) => {
+  if (!room.discard) return room.fx;
+  const spend = ['discardThis', ...room.discard];
+  return room.fx.length ? [{ either: [room.fx, spend] }] : spend;
+};
 
 // Can this figure work this room? Androids never activate rooms at all (rulebook p. 7).
 export function canActivate(fig, room) {
@@ -1046,10 +1068,10 @@ function step(s, a) {
       log(s, `${p.name} activates ${room.name}.`);
       // The room frame sits under the effects so a commander can be asked for a second
       // task once they finish. Artifacts are spent by nobody, so there is no second task.
-      push(s, { k: 'room', fig: a.with?.fig ?? null, phase: 'first' });
+      push(s, { k: 'room', fig: a.with?.fig ?? null, phase: 'first', slot: room.slot });
       // Crowdsourcing left an artifact on this room tech; you may claim it afterwards.
-      if (room.slot !== undefined && p.techSlots[room.slot].art) push(s, { k: 'ask', q: 'takeArt', slot: room.slot });
-      push(s, { k: 'fx', fx: room.fx, i: 0 });
+      if (room.art) push(s, { k: 'ask', q: 'takeArt', slot: room.slot });
+      push(s, { k: 'fx', fx: roomFx(room), i: 0 });
       pump(s);
       break;
     }

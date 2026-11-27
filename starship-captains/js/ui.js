@@ -517,7 +517,7 @@ function techSlotsHtml(s, p, mine) {
     if (!d) return '';
     return `<div class="slotnote"><b>${i + 1}. ${esc(d.name)}</b>
       ${d.text ? `<span class="muted">${esc(d.text)}</span>` : ''}
-      ${d.room ? `<span class="tag room-${d.room}">Room: ${esc(fxText(d.fx))}</span>` : ''}
+      ${d.room ? `<span class="tag room-${d.room}">Room: ${esc(d.fx?.length ? fxText(d.fx) : 'spend this card')}</span>` : ''}
       ${d.discard ? `<span class="muted">Discard to: ${esc(fxText(d.discard))}</span>` : ''}</div>`;
   }).join('');
   const pairs = countIconPairs(p);
@@ -593,6 +593,7 @@ const EFFECT = {
   peekMissions3: 'look at the top 3 missions', trackPerAndroid: 'advance 1 on any track per android in your crew',
   ignoreMissionDamage: 'ignore all damage on this mission',
   freeTrain: 'train a crew member for free', event: '', ignoreDamage1: 'ignore 1 damage',
+  discardThis: 'spend this card',
 };
 
 function fxText(fx) {

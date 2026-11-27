@@ -188,8 +188,9 @@ Never commit anything from `ref/`. The files are large and contain the publisher
   by two humans.** ntfy alerts have not been received on a real device for this game.
 - The owner must paste the updated root `firebase.rules.json` into the Firebase console
   before online play works; until then online games 401.
-- Seven techs sit in their slots doing nothing: Oil Bath, Hull Plating, the Holodeck, and
-  the four discard-to-use cards. They need an action for using an installed tech.
+- Three techs sit in their slots doing nothing: Oil Bath, Hull Plating and the Holodeck.
+  The first two are reactive (`when`) and the Holodeck copies another room; none of the
+  three has engine support. The discard-to-use cards are rooms and now work.
 - Solo mode and the 4-player board side are not implemented.
 - Interpretations the engine makes are listed in `starship-captains/RULES.md`; the ones most
   likely to be wrong are the mission lines that resolve without asking, and how events

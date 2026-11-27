@@ -1246,3 +1246,48 @@ test('a station resolves in order, and the turn waits for its questions', () => 
   assert.equal(ask(g), null, 'the station is finished');
   assert.equal(g.current, 1, 'only now does the turn pass');
 });
+
+test('"Discard this to:" techs are rooms, and spend themselves when worked', () => {
+  // Their card frame carries a crew colour, and the appendix's "even a commander is unable
+  // to use the card twice" only makes sense if a crew member works them.
+  const spend = ['quantum_torpedoes', 'quantum_torpedoes_m', 'time_turner', 'time_turner_m',
+    'omega_megacomputer', 'omega_megacomputer_m', 'ram_drive'];
+  for (const id of spend) assert.ok(D.techDef(id).room, `${id} is a room tech`);
+
+  const s = newGame();
+  s.current = 0;
+  const p = s.players[0];
+  p.techSlots[0] = { tech: 'omega_megacomputer', dmg: false };
+  p.ready = ['y'];
+  assert.ok(roomsFor(s, p).some((r) => r.id === 'omega_megacomputer'), 'it is offered as a room');
+
+  let g = act(s, { type: 'activate', room: 'omega_megacomputer', with: { fig: 'y' } });
+  assert.equal(g.players[0].techSlots[0].tech, null, 'the card leaves its slot');
+  // It is an alpha-beta tech that *uses* the omega deck, not an omega card itself.
+  assert.ok(g.tech.discard.includes('omega_megacomputer'), 'and goes to the tech discard');
+
+  const f = ask(g);
+  assert.equal(f.q, 'tech');
+  assert.equal(f.pool.length, 3);
+  for (const id of f.pool) assert.ok(D.OMEGA.some((o) => o.id === id), `${id} comes off the omega deck`);
+  assert.ok(f.pool.every((id) => !g.tech.omega.includes(id)), 'not the face-up omega cards');
+  assert.ok(f.recycle, 'it may replace an installed tech');
+  // The slot it vacated is free, and so is any other undamaged slot.
+  assert.ok(techSlotChoices(g.players[0], f).includes(0));
+});
+
+test('Ram Drive offers the damage or the card, not both', () => {
+  const s = newGame();
+  s.current = 0;
+  const p = s.players[0];
+  p.techSlots[0] = { tech: 'ram_drive', dmg: false };
+  p.ready = ['r'];
+  const g = act(s, { type: 'activate', room: 'ram_drive', with: { fig: 'r' } });
+  const f = ask(g);
+  assert.equal(f.q, 'branch');
+  assert.equal(f.either.length, 2);
+  const kept = act(g, { type: 'choose', opt: 0 });
+  assert.equal(kept.players[0].techSlots[0].tech, 'ram_drive', 'paying the damage keeps it');
+  const spent = act(g, { type: 'choose', opt: 1 });
+  assert.equal(spent.players[0].techSlots[0].tech, null, 'the other branch spends it');
+});

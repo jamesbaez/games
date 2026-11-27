@@ -360,20 +360,25 @@ export const TECHS = [
   // the Gold Station prints - not the plain grey cadet figure.
   t('tincan_assembly_line', 'Tincan Assembly Line', ['rep', 'mov'], ['med'], { room: 'r', fx: [{ pay: 'artifact', then: ['android', ['repair', 1]] }] }),
   // -- beta --------------------------------------------------------------------------
-  t('quantum_torpedoes', 'Quantum Torpedoes', [], ['rep', 'mov'], { discard: [['fight', 2], 'ignoreDamage1'] }),
-  t('quantum_torpedoes_m', 'Quantum Torpedoes', ['rep', 'mov'], [], { discard: [['fight', 2], 'ignoreDamage1'] }),
+  // The "Discard this to:" cards are ROOM techs - their frame carries a crew colour, and
+  // the appendix says "even a commander is unable to use the card twice", which only makes
+  // sense if a crew member works them. Activating one runs `discard` and bins the card.
+  t('quantum_torpedoes', 'Quantum Torpedoes', [], ['rep', 'mov'], { room: 'r', discard: [['fight', 2], 'ignoreDamage1'] }),
+  t('quantum_torpedoes_m', 'Quantum Torpedoes', ['rep', 'mov'], [], { room: 'r', discard: [['fight', 2], 'ignoreDamage1'] }),
   t('oil_bath', 'Oil Bath', ['rep'], [], { when: 'androidReturns', text: 'When an android leaves you, you may discard this card to keep it.' }),
   t('dimensional_lockers', 'Dimensional Lockers', ['rep', 'mov'], ['rep', 'med'], { when: 'extraStorage', slots: 2, text: 'Can store 2 more artifacts or pirate tokens.' }),
   t('dimensional_lockers_m', 'Dimensional Lockers', ['rep', 'med'], ['rep', 'mov'], { when: 'extraStorage', slots: 2, text: 'Can store 2 more artifacts or pirate tokens.' }),
   t('hull_plating', 'Hull Plating', ['rep'], ['med', 'mov'], { when: 'payPirateOrDiscardToIgnoreDamage', text: 'You can discard a pirate token, or discard this card, to ignore 1 damage.' }),
-  t('omega_megacomputer', 'Omega Megacomputer', ['rep'], ['med'], { discard: ['drawOmega3'] }),
-  t('omega_megacomputer_m', 'Omega Megacomputer', ['med'], ['rep'], { discard: ['drawOmega3'] }),
-  t('ram_drive', 'Ram Drive', [], ['rep'], { room: 'r', cost: ['damage', 1], discard: ['fight', 'move'] }),
+  t('omega_megacomputer', 'Omega Megacomputer', ['rep'], ['med'], { room: 'y', discard: ['drawOmega3'] }),
+  t('omega_megacomputer_m', 'Omega Megacomputer', ['med'], ['rep'], { room: 'y', discard: ['drawOmega3'] }),
+  // "Take 1 damage OR discard this to:" - the same payoff either way, so it is a branch
+  // between keeping the card at a cost and spending the card.
+  t('ram_drive', 'Ram Drive', [], ['rep'], { room: 'r', fx: [['damage', 1], 'fight', 'move'], discard: ['fight', 'move'] }),
   t('engineering_lab', 'Engineering Lab', ['mov'], ['rep'], { room: 'b', fx: ['techR'] }),
   t('experimental_lab', 'Experimental Lab', ['med'], ['mov'], { room: 'b', fx: [{ pay: 'artifact', then: ['techR', ['anyTrack', 1]] }] }),
   t('holodeck', 'Holodeck', ['rep'], ['rep'], { room: 'r', when: 'copyBoardRoom', text: 'Copy the effect of any room on the central tech board.' }),
-  t('time_turner', 'Time Turner', ['mov'], ['rep'], { discard: ['queue'] }),
-  t('time_turner_m', 'Time Turner', ['rep'], ['mov'], { discard: ['queue'] }),
+  t('time_turner', 'Time Turner', ['mov'], ['rep'], { room: 'b', discard: ['queue'] }),
+  t('time_turner_m', 'Time Turner', ['rep'], ['mov'], { room: 'b', discard: ['queue'] }),
   // -- beta adapters: edge icons only, and may replace an existing tech ---------------
   t('plasma_adapter', 'Plasma Adapter', ['rep', 'mov'], ['med', 'mov'], { when: 'replacesTech', text: 'This can replace an existing tech.' }),
   t('supply_adapter', 'Supply Adapter', ['rep', 'med'], ['rep', 'mov'], { when: 'replacesTech', text: 'This can replace an existing tech.' }),

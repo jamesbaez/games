@@ -125,6 +125,15 @@ button.pic { background: none; padding: 0 2px; min-height: 0; font-size: 14px; l
 /* The board list: one row per route, with the route's colour dot. */
 table.board { width: 100%; border-collapse: collapse; }
 table.board td, table.board th { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+/* A finished mission in the ship panel: name, one dot per line colour, picture button. */
+.donem { display: inline-flex; align-items: center; gap: 3px; background: var(--panel);
+  border-radius: 6px; padding: 1px 5px; margin: 2px 3px 2px 0; }
+.ldot { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  border: 0; background: var(--line); }
+.ldot.line-r { background: #d94a4a; } .ldot.line-y { background: #e0c020; }
+.ldot.line-b { background: #4a7fd9; } .ldot.line-gold { background: #b8860b; }
+.ldot.line-gold::after { content: none; }
+
 .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; }
 .dot-red { background: #e0407a; } .dot-green { background: #3ec45c; } .dot-yellow { background: #e8c020; }
 .tag.pir { background: #5a2130; }

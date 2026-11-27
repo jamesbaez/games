@@ -637,6 +637,14 @@ function lineCost(line) {
 }
 
 const lineText = (line) => `${COLOR_NAME[line.c] ?? line.c}: ${fxText(line.fx)}`;
+// A finished mission, for the ship panel: its name, a dot per line colour (so a colour
+// count can be read off without opening anything) and a button for the card itself.
+const doneMission = (id) => {
+  const m = missionDef(id);
+  const dots = m.lines.map((l) => `<span class="ldot line-${l.c}" title="${esc(COLOR_NAME[l.c] ?? l.c)}"></span>`).join('');
+  return `<span class="donem">${esc(m.name)} <span class="pts">${m.pts}</span>${dots}${pic('missions/' + id)}</span>`;
+};
+
 const missionLabel = (id) => {
   const m = missionDef(id);
   return `${esc(m.name)} (${m.pts})`;
@@ -876,7 +884,7 @@ function shipHtml(s, p, mine) {
       ${p.excess ? ` <span class="tag">+${p.excess} excess damage</span>` : ''}</td></tr>
     <tr><th>Damage</th><td>${damageCount(p)} <span class="muted">(${D.PTS2.damage / 2} point each)</span></td></tr>
     <tr><th>Tracks</th><td>${p.marks.map((m, t) => `<div>${esc(trackName(t))}: space ${m.sp}${m.loops ? ` +${m.loops} lap${m.loops > 1 ? 's' : ''}` : ''} <span class="muted">(${D.TRACK_ZONE_PTS[m.sp]} pts)</span></div>`).join('')}</td></tr>
-    <tr><th>Missions done</th><td>${p.done.length ? p.done.map((id) => missionLabel(id)).join(', ') : '<span class="muted">none</span>'}</td></tr>
+    <tr><th>Missions done</th><td>${p.done.length ? p.done.map(doneMission).join(' ') : '<span class="muted">none</span>'}</td></tr>
     <tr><th>Rooms</th><td>${rooms.map((r) => `<span class="tag room-${r.color}">${esc(r.name)}</span>`).join(' ')}
       ${Object.keys(p.roomDmg).length ? `<div class="muted">Out of action: ${Object.keys(p.roomDmg).map((id) => esc(D.ROOMS.find((x) => x.id === id).name)).join(', ')}</div>` : ''}</td></tr>
   </table>

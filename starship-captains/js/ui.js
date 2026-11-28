@@ -872,10 +872,27 @@ function missionHereHtml(s, p) {
       ${assigning.crew[j] ? figShort(assigning.crew[j]) : (j === i ? '👉' : '·')} ${esc(lineText(l))}
       ${D.matches(assigning.crew[j] ?? '', l.c) ? ' <b>✓</b>' : ''}</div>`).join('')}
     ${done ? `${btn('Go', { type: 'mission', assign: assigning.crew }, { cls: 'primary' })}`
-      : `<p>Choose crew for the <b>${esc(COLOR_NAME[m.lines[i].c] ?? m.lines[i].c)}</b> line:</p>
-         <div class="btns">${[...new Set(left)].map((fig) =>
-           `<button data-lobby="pickCrew" data-fig="${esc(fig)}">${figName(fig)}${D.matches(fig, m.lines[i].c) ? ' ✓' : ''}</button>`).join('')}</div>`}
+      : crewPickHtml(m.lines[i], [...new Set(left)])}
     <button class="secondary" data-lobby="cancelAssign">Cancel</button></section>`;
+}
+
+// Picking the crew for one line. "The crew figure can be any color. You can even send
+// cadets" (rulebook p. 12) - but a figure of the wrong colour makes the line do nothing,
+// and a small tick on a flat list of buttons was far too easy to misread. The ones that
+// work come first; the rest are under their own heading, saying what they would cost.
+function crewPickHtml(line, left) {
+  const colour = esc(COLOR_NAME[line.c] ?? line.c);
+  const fits = left.filter((f) => D.matches(f, line.c));
+  const rest = left.filter((f) => !D.matches(f, line.c));
+  const pick = (fig, cls) => `<button ${cls} data-lobby="pickCrew" data-fig="${esc(fig)}">${figName(fig)}</button>`;
+  return `<p>Who works the <b class="line-${line.c} inline">${colour}</b> line — <i>${esc(lineText(line))}</i>?</p>
+    ${fits.length
+      ? `<div class="btns">${fits.map((f) => pick(f, 'class="primary"')).join('')}</div>`
+      : '<p class="muted">Nobody in your ready room matches this line.</p>'}
+    <details ${rest.length && !fits.length ? 'open' : ''}>
+      <summary class="muted">Send someone who doesn't match (${rest.length}) — the line does nothing</summary>
+      <div class="btns">${rest.map((f) => pick(f, 'class="secondary"')).join('')}</div>
+    </details>`;
 }
 
 // ---------- your ship ----------

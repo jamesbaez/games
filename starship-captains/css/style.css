@@ -116,6 +116,11 @@ button.pic { background: none; padding: 0 2px; min-height: 0; font-size: 14px; l
 /* ---- Starship Captains ---- */
 /* A mission line, colour-coded by the crew it needs. Gold takes an android, nothing else. */
 .line { border-left: 6px solid var(--line); padding: 2px 8px; margin: 3px 0; border-radius: 3px; }
+/* The line colour named inline, in the crew picker. */
+b.inline { border-left-width: 0; padding: 0 5px; border-radius: 3px; color: #111; }
+b.inline.line-r { background: #d94a4a; } b.inline.line-y { background: #e0c020; }
+b.inline.line-b { background: #4a7fd9; } b.inline.line-gold { background: #b8860b; }
+b.inline.line-gold::after { content: none; }
 .line-r { border-left-color: #d94a4a; }
 .line-y { border-left-color: #e0c020; }
 .line-b { border-left-color: #4a7fd9; }

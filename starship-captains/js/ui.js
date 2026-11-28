@@ -3,7 +3,7 @@
 // replaced, so a move arriving mid-message can't wipe the chat box or close the keyboard.
 import {
   setup, apply, ask, score, winners, neighbours, routesAt, routeEnd, reservedBy,
-  damageCount, cargoTokens, canActivate, roomsFor, techChoices, techSlotChoices,
+  damageCount, cargoTokens, canActivate, roomsFor, techChoices, techSlotChoices, payChoices,
   bonusesFor, techDef, sharedTech, abilities, trainCost, promoteCost, medalsAvailable,
   countIconPairs, locDef, undoable, subordinates, GameError,
 } from './engine.js';
@@ -412,6 +412,8 @@ function askHtml(s, p) {
     },
     second: () => secondAskHtml(s, p, f),
     branch: () => f.either.map((fx, i) => choose(esc(fxText(fx)), i)).join(''),
+    spend: () => `<p>${f.left > 1 ? `${f.left} medals still to pay. ` : ''}What do you give up?</p>
+      ${payChoices(s, p).map((o) => choose(o.medal ? `A medal (${p.medals})` : esc(tokenName(p.cargo[o.i])), o)).join('')}`,
     pay: () => payAskHtml(s, p, f),
     takeArt: () => `${choose('Take the artifact', 'take')} ${choose('Leave it', 'skip', { cls: 'secondary' })}`,
     freeTrain: () => `<p>Free training — pick a crew member, then a colour:</p>
@@ -429,6 +431,7 @@ const ASK_TITLE = {
   bump: 'Make room', stow: 'No room aboard', track: 'Which faction track?',
   tech: 'Research a tech', peekMissions: 'Choose the next mission', line: 'Resolve this line?',
   second: "Commander's second task", branch: 'Choose one', pay: 'Spend something?',
+  spend: 'Pay a medal',
   takeArt: 'An artifact was left here', freeTrain: 'Free training',
 };
 

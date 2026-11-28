@@ -75,10 +75,12 @@ So when an event damages or repairs someone else: damage jettisons their first s
 token, and a repair takes the first damage it finds (excess, then cargo, then tech slot,
 then a sabotaged room). Only their own turn asks them to choose.
 
-### Medals are spent before stored tokens
+### You choose what pays a medal cost
 With the Artifact or Trophy Display installed, a stored artifact or pirate token can pay
-as a medal. The engine spends real medals first, then the oldest qualifying token, rather
-than asking which to spend.
+as a medal. Which to give up is a real decision - a pirate token is worth a point, an
+artifact half of one, and an artifact may belong to an omega card's set - so training and
+promotion ask, one payment at a time. When only one kind is left it is taken without a
+question.
 
 ### Draw-three leftovers go to the bottom
 "Draw 3 and research one of them" — the two you don't take go to the bottom of their deck.

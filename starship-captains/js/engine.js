@@ -267,6 +267,15 @@ export function pump(s) {
       continue;
     }
     if (f.k === 'endTurn') { s.pending.pop(); finishTurn(s); continue; }
+    if (f.k === 'spend') {
+      if (f.left <= 0) { s.pending.pop(); continue; }
+      const who = s.players[s.current];
+      const opts = payChoices(s, who);
+      if (!opts.length) fail('You cannot pay that many medals.');
+      if (opts.length === 1) { payOne(s, who, opts[0]); f.left--; continue; }
+      askFor(s, 'spend', { left: f.left });
+      return;
+    }
     if (f.k === 'mission') { missionStep(s, f); continue; }
     if (f.k === 'room') {
       // The room's effects are done. A commander now takes a second task; anyone else
@@ -325,22 +334,43 @@ export function promoteCost(s, p, c) {
 }
 
 // Medals are spent from the medal pile, but the Artifact and Trophy Displays let stored
-// tokens stand in for them. INTERPRETATION: medals go first, then the oldest token, so
-// the player is never asked which to spend.
+// tokens stand in for them. Which to give up is a real decision - a pirate token is worth
+// a point, an artifact half of one, and an artifact may be carrying an omega card's set -
+// so the player is asked whenever more than one kind could pay.
+const spendKinds = (s, p) => abilities(s, p, 'spendAs').map((d) => d.tok);
+
 export function medalsAvailable(s, p) {
-  const kinds = abilities(s, p, 'spendAs').map((d) => d.tok);
+  const kinds = spendKinds(s, p);
   return p.medals + p.cargo.filter((c) => c && kinds.includes(c.t)).length;
 }
-function spendMedals(s, p, n) {
-  const kinds = abilities(s, p, 'spendAs').map((d) => d.tok);
-  for (let i = 0; i < n; i++) {
-    if (p.medals > 0) { p.medals--; continue; }
-    const j = p.cargo.findIndex((c) => c && kinds.includes(c.t));
-    if (j < 0) fail('You cannot pay that many medals.');
-    if (p.cargo[j].t === 'art') s.artifactDiscard.push(p.cargo[j].id);
-    log(s, `${p.name} spends a stored ${p.cargo[j].t === 'art' ? 'artifact' : 'pirate token'} as a medal.`);
-    p.cargo[j] = null;
+
+// The distinct things that could pay one medal right now: the medal pile, then one entry
+// per kind of stored token (artifacts of the same face count as one choice).
+export function payChoices(s, p) {
+  const kinds = spendKinds(s, p);
+  const out = p.medals > 0 ? [{ medal: true }] : [];
+  const seen = new Set();
+  p.cargo.forEach((c, i) => {
+    if (!c || !kinds.includes(c.t)) return;
+    const key = c.t === 'art' ? `art:${c.id}` : c.t;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ i });
+  });
+  return out;
+}
+
+function payOne(s, p, opt) {
+  if (opt?.medal) {
+    if (p.medals < 1) fail('You have no medal to spend.');
+    p.medals--;
+    return;
   }
+  const c = p.cargo[opt?.i];
+  if (!c || !spendKinds(s, p).includes(c.t)) fail('That cannot be spent as a medal.');
+  if (c.t === 'art') s.artifactDiscard.push(c.id);
+  log(s, `${p.name} spends a stored ${c.t === 'art' ? 'artifact' : 'pirate token'} as a medal.`);
+  p.cargo[opt.i] = null;
 }
 
 // Dimensional Lockers widen the hold. The extra slots live on the end of p.cargo, added
@@ -1027,9 +1057,10 @@ function step(s, a) {
       if (i < 0) fail('That crew member is not in your ready room.');
       if (D.isCommander(a.from) || a.from === D.ANDROID) fail('Only cadets and ensigns can be trained.');
       if (!D.ENSIGNS.includes(a.to)) fail('Train them into a red, yellow or blue ensign.');
-      spendMedals(s, p, cost);
       p.ready.splice(i, 1, a.to);
       log(s, `${p.name} trains ${a.from === D.CADET ? 'a cadet' : 'an ensign'} into a ${a.to} ensign.`);
+      if (cost) push(s, { k: 'spend', left: cost });
+      pump(s);
       break;
     }
     case 'promote': {
@@ -1039,12 +1070,13 @@ function step(s, a) {
       if (p.rings <= 0) fail(`You may only have ${D.COMMANDER_LIMIT} commanders.`);
       const i = p.ready.indexOf(a.c);
       if (i < 0 || !D.ENSIGNS.includes(a.c)) fail('Pick an ensign in your ready room.');
-      spendMedals(s, p, cost);
       p.rings--;
       p.ready.splice(i, 1, a.c.toUpperCase());
       log(s, `${p.name} promotes a ${a.c} ensign to commander.`);
       // Fleet Comms reports a promotion back to the Cooperative.
       afterTrigger(s, p, 'afterPromote', (d) => !d.c || d.c === a.c);
+      // On top of the trigger's frames, so you are asked what to pay before anything else.
+      if (cost) push(s, { k: 'spend', left: cost });
       pump(s);
       break;
     }
@@ -1296,6 +1328,14 @@ function choose(s, p, opt) {
       const sl = p.techSlots[f.slot];
       if (opt !== 'skip' && sl?.art) { gainToken(s, p, { t: 'art', id: sl.art }); log(s, `${p.name} collects the artifact left on the room.`); }
       if (sl) sl.art = null;
+      break;
+    }
+    // Which medal-or-token to give up for a train or a promotion, one at a time.
+    case 'spend': {
+      const sf = top(s);
+      if (sf?.k !== 'spend') fail('Nothing to pay for right now.');
+      payOne(s, p, opt);
+      sf.left--;
       break;
     }
     // "A or B": resolve one branch of the effect.

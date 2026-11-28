@@ -1291,3 +1291,43 @@ test('Ram Drive offers the damage or the card, not both', () => {
   const spent = act(g, { type: 'choose', opt: 1 });
   assert.equal(spent.players[0].techSlots[0].tech, null, 'the other branch spends it');
 });
+
+test('you choose what pays for a promotion', () => {
+  const s = newGame();
+  s.current = 0;
+  const p = s.players[0];
+  p.techSlots[0] = { tech: 'artifact_display', dmg: false };   // artifacts spend as medals
+  p.techSlots[1] = { tech: 'trophy_display', dmg: false };     // and so do pirate tokens
+  p.medals = 1;
+  p.cargo = [{ t: 'art', id: 'ry' }, { t: 'pir' }, null, null, null, null];
+  p.ready = ['r'];
+  p.rings = 2;
+
+  let g = act(s, { type: 'promote', c: 'r', p: 0 });
+  assert.equal(g.players[0].ready[0], 'R', 'the promotion happened');
+  // Three to pay. It asks while a choice remains; the last one has only the pirate token
+  // left to give, so it is taken without a pointless question.
+  for (const pick of [{ medal: true }, { i: 0 }]) {
+    const f = ask(g);
+    assert.equal(f.q, 'spend', 'it asks what to give up');
+    g = act(g, { type: 'choose', opt: pick });
+  }
+  assert.equal(ask(g), null, 'the forced last payment is taken automatically');
+  const q = g.players[0];
+  assert.equal(q.medals, 0);
+  assert.deepEqual(q.cargo.filter(Boolean), [], 'the artifact and the pirate token are gone');
+  assert.ok(g.artifactDiscard.includes('ry'), 'the artifact is discarded face up');
+});
+
+test('with only one way to pay, nothing is asked', () => {
+  const s = newGame();
+  s.current = 0;
+  const p = s.players[0];
+  p.medals = 3;
+  p.ready = ['b'];
+  p.rings = 2;
+  const g = act(s, { type: 'promote', c: 'b', p: 0 });
+  assert.equal(ask(g), null);
+  assert.equal(g.players[0].medals, 0);
+  assert.equal(g.players[0].ready[0], 'B');
+});

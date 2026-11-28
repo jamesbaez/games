@@ -1014,14 +1014,19 @@ function techBoardHtml(s) {
   const card = (id) => {
     if (!id) return '<div class="tslot muted">(refills at end of turn)</div>';
     const d = techDef(id);
-    return `<div class="tslot"><b>${esc(d.name)}</b> ${pic('techs/' + id)}
-      ${d.room ? `<div class="tag room-${d.room}">Room: ${esc(fxText(d.fx))}</div>` : ''}
+    return `<div class="tslot"><b>${esc(d.name)}</b>${d.kind === 'omega' ? ' <span class="tag om">\u03a9</span>' : ''} ${pic('techs/' + id)}
+      ${d.room ? `<div class="tag room-${d.room}">Room: ${esc(d.fx?.length ? fxText(d.fx) : 'spend this card')}</div>` : ''}
       ${d.text ? `<div class="muted">${esc(d.text)}</div>` : ''}
       ${d.discard ? `<div class="muted">Discard to: ${esc(fxText(d.discard))}</div>` : ''}
       <div class="edges">${d.L.map(bonusName).join(' ')} | ${d.R.map(bonusName).join(' ')}</div></div>`;
   };
   return `<div class="slots">${s.tech.row.map(card).join('')}</div>
-    <h3>Omega techs</h3><div class="slots">${s.tech.omega.map(card).join('')}</div>
+    <h3>Omega spaces</h3>
+    <div class="slots">${s.tech.omega.map(card).join('')}</div>
+    <p class="muted">Three cards from the omega deck at setup. Taking one refills the space
+      from the ordinary tech deck (rulebook p. 11: "always deal from the alpha-beta deck,
+      even if an omega tech was taken"), so a plain tech can end up here. \u03a9 marks the
+      ones that still score at the end of the game.</p>
     <p class="muted">${s.tech.deck.length} techs left in the deck.</p>`;
 }
 

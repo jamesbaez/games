@@ -1331,3 +1331,24 @@ test('with only one way to pay, nothing is asked', () => {
   assert.equal(g.players[0].medals, 0);
   assert.equal(g.players[0].ready[0], 'B');
 });
+
+test('an omega space refills from the ordinary tech deck', () => {
+  // Rulebook p. 11: "always deal from the alpha-beta deck, even if an omega tech was
+  // taken", repeated in the appendix. So a plain tech legitimately sits in an omega space.
+  const s = newGame();
+  s.current = 0;
+  const p = s.players[0];
+  p.techSlots.forEach((sl) => { sl.tech = null; sl.dmg = false; });
+  p.ready = ['b'];
+  const taken = s.tech.omega[0];
+  assert.ok(D.OMEGA.some((o) => o.id === taken), 'setup deals omega cards there');
+
+  let g = act(s, { type: 'activate', room: 'science', with: { fig: 'b' } });
+  g = act(g, { type: 'choose', opt: { card: taken, slot: 0 } });
+  while (ask(g)) g = act(g, { type: 'choose', opt: 'skip' });   // decline any edge bonus
+  g = act(g, { type: 'endTurn' });
+  const refill = g.tech.omega[0];
+  assert.ok(refill && refill !== taken, 'the space was refilled');
+  assert.ok(!D.OMEGA.some((o) => o.id === refill), 'from the alpha-beta deck, not the omega deck');
+  assert.equal(g.tech.omegaDeck.length, s.tech.omegaDeck.length, 'the omega deck is untouched');
+});

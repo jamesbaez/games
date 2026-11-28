@@ -919,6 +919,9 @@ const roomFx = (room) => {
   return room.fx.length ? [{ either: [room.fx, spend] }] : spend;
 };
 
+// Just enough of an effect list to name it in the log - the UI owns the real wording.
+const fxWord = (fx) => (fx ?? []).map((t) => (Array.isArray(t) ? `${t[0]} ${t[1]}` : String(t))).join(' + ') || 'it';
+
 // Can this figure work this room? Androids never activate rooms at all (rulebook p. 7).
 export function canActivate(fig, room) {
   if (fig === D.ANDROID) return false;
@@ -1350,9 +1353,17 @@ function choose(s, p, opt) {
     case 'pay': {
       if (opt === 'skip') { log(s, `${p.name} declines to pay.`); break; }
       if (f.cost === 'medal') {
-        if (p.medals < 1) fail('You have no medal to spend.');
-        p.medals--;
-      } else if (f.cost === 'tech') {
+        // A medal cost can also be paid with a stored artifact or pirate token when the
+        // matching Display is installed, so it goes through the same "what do you give
+        // up?" question as training and promotion. The reward sits under the payment, so
+        // it resolves once the payment is settled.
+        if (medalsAvailable(s, p) < 1) fail('You have no medal to spend.');
+        log(s, `${p.name} pays 1 medal for ${fxWord(f.then)}.`);
+        push(s, { k: 'fx', fx: f.then, i: 0 });
+        push(s, { k: 'spend', left: 1 });
+        break;
+      }
+      if (f.cost === 'tech') {
         // Give up a tech you have already installed; the slot is left empty.
         const i = Number(opt);
         if (!p.techSlots[i]?.tech) fail('Pick an installed tech to give up.');
@@ -1368,7 +1379,7 @@ function choose(s, p, opt) {
         if (t === 'art') s.artifactDiscard.push(p.cargo[i].id);
         p.cargo[i] = null;
       }
-      if (f.cost !== 'tech') log(s, `${p.name} spends a ${f.cost === 'pirateTok' ? 'pirate token' : f.cost}.`);
+      if (f.cost !== 'tech') log(s, `${p.name} spends ${f.cost === 'pirateTok' ? 'a pirate token' : 'an artifact'}.`);
       push(s, { k: 'fx', fx: f.then, i: 0 });
       break;
     }

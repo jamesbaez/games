@@ -1352,3 +1352,35 @@ test('an omega space refills from the ordinary tech deck', () => {
   assert.ok(!D.OMEGA.some((o) => o.id === refill), 'from the alpha-beta deck, not the omega deck');
   assert.equal(g.tech.omegaDeck.length, s.tech.omegaDeck.length, 'the omega deck is untouched');
 });
+
+test("a mission's medal cost accepts a stored artifact", () => {
+  // The Artifact Display makes a stored artifact spendable as a medal, and a mission line
+  // that costs a medal has to honour that - the UI already offered it.
+  const s = newGame();
+  s.current = 0;
+  const p = s.players[0];
+  p.techSlots[0] = { tech: 'artifact_display', dmg: false };
+  p.medals = 0;
+  p.cargo = [{ t: 'art', id: 'by' }, null, null, null, null, null];
+  s.pending = [{ k: 'fx', fx: [{ pay: 'medal', then: ['android'] }], i: 0 }];
+
+  let g = pump(s) ?? s;
+  assert.equal(ask(g).q, 'pay');
+  g = act(g, { type: 'choose', opt: 'pay' });
+  // One artifact is the only way to pay, so it is taken without a further question.
+  assert.equal(ask(g), null, 'the payment settled');
+  assert.deepEqual(g.players[0].cargo.filter(Boolean), [], 'the artifact was spent');
+  assert.ok(g.artifactDiscard.includes('by'));
+  assert.ok(g.players[0].ready.includes(D.ANDROID), 'and the reward arrived');
+});
+
+test('a medal cost with nothing to pay it is refused', () => {
+  const s = newGame();
+  s.current = 0;
+  const p = s.players[0];
+  p.medals = 0;
+  p.cargo = p.cargo.map(() => null);
+  s.pending = [{ k: 'fx', fx: [{ pay: 'medal', then: ['android'] }], i: 0 }];
+  const g = pump(s) ?? s;
+  expectError(() => act(g, { type: 'choose', opt: 'pay' }));
+});
